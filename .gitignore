@@ -1,0 +1,8 @@
+test/nifi-2.9.0/
+test/nifi-drop/
+nifi-drop/
+explore.data.gouv.fr/
+*.log
+*.tmp
+.claude/
+test/config.php
