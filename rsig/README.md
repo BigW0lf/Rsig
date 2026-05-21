@@ -1,4 +1,4 @@
-# Mini SIG
+# RSig
 
 Application cartographique légère connectée au CRM Dynamics 365 de RTaxes.
 

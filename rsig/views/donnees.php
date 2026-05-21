@@ -3,22 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mini SIG — Données</title>
+    <title>RSig — Données</title>
     <link rel="stylesheet" href="assets/style.css">
+    <script>const _P={carte:'/',donnees:'/donnees',requetes:'/requetes',crm:'/crm'};function navTo(p){window.parent?.showPage?window.parent.showPage(p):location.href=_P[p]||'/';}if(window.self!==window.top)document.addEventListener('DOMContentLoaded',()=>{const n=document.querySelector('nav');if(n)n.style.display='none';document.body.style.paddingTop='0';});</script>
 </head>
 <body>
 
 <nav>
     <span class="nav-logo">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="white" stroke-width="1.5"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10A15.3 15.3 0 0 1 8 12 15.3 15.3 0 0 1 12 2z" stroke="white" stroke-width="1.5"/></svg>
-        Mini SIG
+        RSig
     </span>
-    <a href="/">Carte</a>
-    <a href="/donnees" class="active">Données</a>
-    <a href="/maj-bdd">Mise à jour BDD</a>
-    <a href="/crm">CRM</a>
-    <span class="nav-spacer"></span>
-    <a href="https://localhost:8443/nifi" target="_blank" class="nifi-link">NiFi</a>
+    <a href="#" onclick="navTo('carte');return false">Carte</a>
+    <a href="#" class="active">Données</a>
+    <a href="#" onclick="navTo('requetes');return false">Requêtes</a>
+    <a href="#" onclick="navTo('crm');return false">CRM</a>
 </nav>
 
 <div class="page-content">

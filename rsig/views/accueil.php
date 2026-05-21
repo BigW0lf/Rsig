@@ -3,9 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mini SIG — Carte</title>
+    <title>RSig — Carte</title>
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css" crossorigin="">
     <link rel="stylesheet" href="assets/style.css">
+    <style>
+        /* Évite le FOUC : body invisible jusqu'au premier paint avec CSS */
+        body { opacity: 0; transition: opacity .15s; }
+        body.ready { opacity: 1; }
+    </style>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => document.body.classList.add('ready'));
+    </script>
 </head>
 <body>
 
@@ -15,17 +23,19 @@
             <circle cx="12" cy="12" r="10" stroke="white" stroke-width="1.5"/>
             <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10A15.3 15.3 0 0 1 8 12 15.3 15.3 0 0 1 12 2z" stroke="white" stroke-width="1.5"/>
         </svg>
-        Mini SIG
+        RSig
     </span>
-    <a href="/" class="active">Carte</a>
-    <a href="/donnees">Données</a>
-    <a href="/maj-bdd">Mise à jour BDD</a>
-    <a href="/crm">CRM</a>
-    <span class="nav-spacer"></span>
-    <a href="https://localhost:8443/nifi" target="_blank" class="nifi-link">
-        NiFi&nbsp;<span id="nifi-dot" class="dot dot-pending"></span>
-    </a>
+    <a href="#" class="active" data-page="carte">Carte</a>
+    <a href="#" data-page="requetes">Requêtes</a>
+    <a href="#" data-page="crm">CRM</a>
+    <a href="#" data-page="donnees" style="margin-left:auto">Données</a>
 </nav>
+<!-- Iframes pages secondaires — chargées une seule fois, gardent leur état -->
+<div id="page-overlay" style="display:none;position:fixed;top:48px;left:0;right:0;bottom:0;z-index:100;flex-direction:column">
+    <iframe id="iframe-donnees"  src=""  style="width:100%;height:100%;border:none;display:none"></iframe>
+    <iframe id="iframe-requetes" src=""  style="width:100%;height:100%;border:none;display:none"></iframe>
+    <iframe id="iframe-crm"      src=""  style="width:100%;height:100%;border:none;display:none"></iframe>
+</div>
 
 <div id="app">
 
@@ -181,7 +191,7 @@
 </div>
 
 <script src="https://unpkg.com/maplibre-gl/dist/maplibre-gl.js" crossorigin=""></script>
-<script src="assets/map.js"></script>
+<script type="module" src="assets/map.js"></script>
 <script>
 // ── Recherche géocodage ──────────────────────────────────
 let searchTimer;
@@ -220,16 +230,55 @@ document.addEventListener('click', e => {
     if (!e.target.closest('#search-wrap')) dropdown.innerHTML = '';
 });
 
-// ── Statut NiFi ───────────────────────────────────────────
-fetch('/api/nifi/status')
-    .then(r => r.json())
-    .then(d => {
-        document.getElementById('nifi-dot').className =
-            'dot ' + (d.status === 'up' ? 'dot-up' : 'dot-down');
-    })
-    .catch(() => {
-        document.getElementById('nifi-dot').className = 'dot dot-down';
+// ── Navigation SPA ───────────────────────────────────────
+const PAGES = { donnees: '/donnees', requetes: '/requetes', crm: '/crm' };
+const overlay = document.getElementById('page-overlay');
+
+function showPage(page) {
+    const isMap = (page === 'carte');
+
+    overlay.style.display = isMap ? 'none' : 'flex';
+    // Rend #app inactif sans le détruire (MapLibre doit rester monté)
+    const app = document.getElementById('app');
+    app.style.visibility  = isMap ? '' : 'hidden';
+    app.style.pointerEvents = isMap ? '' : 'none';
+
+    Object.keys(PAGES).forEach(p => {
+        const f = document.getElementById('iframe-' + p);
+        if (f) f.style.display = 'none';
     });
+
+    if (!isMap) {
+        const iframe = document.getElementById('iframe-' + page);
+        if (iframe) {
+            if (!iframe.getAttribute('data-loaded')) {
+                iframe.src = PAGES[page];
+                iframe.setAttribute('data-loaded', '1');
+            }
+            iframe.style.display = 'block';
+        }
+    }
+
+    document.querySelectorAll('nav a[data-page]').forEach(a => {
+        a.classList.toggle('active', a.dataset.page === page);
+    });
+
+    history.pushState({ page }, '', isMap ? '/' : PAGES[page]);
+}
+
+document.querySelectorAll('nav a[data-page]').forEach(a => {
+    a.addEventListener('click', e => { e.preventDefault(); showPage(a.dataset.page); });
+});
+
+window.addEventListener('popstate', e => showPage(e.state?.page || 'carte'));
+
+// Restaure la page active selon l'URL — après chargement complet pour ne pas bloquer MapLibre
+window.addEventListener('load', () => {
+    const pathToPage = { '/donnees': 'donnees', '/requetes': 'requetes', '/crm': 'crm' };
+    const initPage = pathToPage[location.pathname] || 'carte';
+    if (initPage !== 'carte') showPage(initPage);
+    else history.replaceState({ page: 'carte' }, '', location.pathname);
+});
 </script>
 </body>
 </html>
