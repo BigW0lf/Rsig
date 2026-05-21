@@ -1,9 +1,14 @@
 <?php
 
-Flight::route('GET /', fn() => Flight::render('accueil'));
-Flight::route('GET /crm', fn() => Flight::render('crm'));
+// ── Auth ──────────────────────────────────────────────────
+Flight::route('GET /auth/callback', function () { handleAuthCallback(); });
+Flight::route('GET /auth/logout',   function () { handleLogout(); });
 
-Flight::route('GET /donnees', function () {
+// ── Pages protégées ───────────────────────────────────────
+Flight::route('GET /', function () { requireAuth(); Flight::render('accueil'); });
+Flight::route('GET /crm', function () { requireAuth(); Flight::render('crm'); });
+
+Flight::route('GET /donnees', function () { requireAuth();
     $db     = getDb();
     $tables = [];
     $cols   = [];
@@ -24,5 +29,5 @@ Flight::route('GET /donnees', function () {
     Flight::render('donnees', compact('db', 'tables', 'table', 'cols', 'rows') + ['connected' => $db !== null]);
 });
 
-Flight::route('GET /maj-bdd', fn() => Flight::render('maj_bdd_archive', ['connected' => getDb() !== null]));
-Flight::route('GET /requetes', fn() => Flight::render('requetes', ['connected' => getDb() !== null]));
+Flight::route('GET /maj-bdd', function () { requireAuth(); Flight::render('maj_bdd_archive', ['connected' => getDb() !== null]); });
+Flight::route('GET /requetes', function () { requireAuth(); Flight::render('requetes', ['connected' => getDb() !== null]); });

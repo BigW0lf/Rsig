@@ -29,6 +29,8 @@
     <a href="#" data-page="requetes">Requêtes</a>
     <a href="#" data-page="crm">CRM</a>
     <a href="#" data-page="donnees" style="margin-left:auto">Données</a>
+    <span class="nav-user"><?= htmlspecialchars($_SESSION['user_name'] ?? '') ?></span>
+    <a href="/auth/logout" class="nav-logout" title="Déconnexion">&#x2715;</a>
 </nav>
 <!-- Iframes pages secondaires — chargées une seule fois, gardent leur état -->
 <div id="page-overlay" style="display:none;position:fixed;top:48px;left:0;right:0;bottom:0;z-index:100;flex-direction:column">
