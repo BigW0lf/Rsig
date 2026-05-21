@@ -28,9 +28,7 @@ function requireAuth(): void {
 }
 
 function authCallbackUrl(): string {
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host   = $_SERVER['HTTP_HOST'] ?? 'rcarto.rtaxes-geometre-expert.fr';
-    return $scheme . '://' . $host . '/auth/callback';
+    return 'https://rcarto.rtaxes-geometre-expert.fr/auth/callback';
 }
 
 function handleAuthCallback(): void {
