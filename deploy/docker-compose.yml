@@ -5,7 +5,7 @@ services:
     container_name: rsig-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: mabase
+      POSTGRES_DB: Rbdd
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASS}
     volumes:
@@ -23,7 +23,7 @@ services:
     depends_on:
       - db
     environment:
-      DB_DSN: pgsql:host=db;port=5432;dbname=mabase
+      DB_DSN: pgsql:host=db;port=5432;dbname=Rbdd
       DB_USER: ${DB_USER}
       DB_PASS: ${DB_PASS}
       DYN_TENANT_ID: ${DYN_TENANT_ID}
