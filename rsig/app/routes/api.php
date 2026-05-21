@@ -366,7 +366,7 @@ Flight::route('GET /api/coeff/clusters', function () {
     $champ = validateChamp(Flight::request()->query['champ'] ?? '', COEFF_CHAMPS, 'coeff_2026');
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $sql = "SELECT codecommune, $champ AS valeur, nb_parcelles,
-                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom::geometry, 0.001), 5)::text AS geojson
+                   ST_AsGeoJSON(ST_Centroid(geom::geometry), 6)::text AS geojson
             FROM coeff_clusters WHERE $champ IS NOT NULL ORDER BY codecommune";
     $stmt = $db->query($sql);
     Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
