@@ -23,7 +23,7 @@ services:
     depends_on:
       - db
     environment:
-      DB_DSN: pgsql:host=db;port=5432;dbname=Rbdd
+      DB_DSN: "pgsql:host=db;port=5432;dbname=Rbdd;options='--search_path=public'"
       DB_USER: ${DB_USER}
       DB_PASS: ${DB_PASS}
       DYN_TENANT_ID: ${DYN_TENANT_ID}
