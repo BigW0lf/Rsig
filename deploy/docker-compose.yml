@@ -29,6 +29,8 @@ services:
       DYN_TENANT_ID: ${DYN_TENANT_ID}
       DYN_CLIENT_ID: ${DYN_CLIENT_ID}
       DYN_CLIENT_SECRET: ${DYN_CLIENT_SECRET}
+    volumes:
+      - ./config.php:/var/www/html/config.php:ro
     expose:
       - "80"
 
