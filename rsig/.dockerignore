@@ -1,0 +1,7 @@
+config.php
+nifi-drop/
+nifi-2.9.0/
+*.log
+.git
+.claude
+CLAUDE.md

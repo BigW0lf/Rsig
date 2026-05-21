@@ -1,0 +1,51 @@
+services:
+
+  db:
+    image: postgis/postgis:17-3.5
+    container_name: rsig-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mabase
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    expose:
+      - "5432"
+
+  app:
+    image: rsig-app:${GIT_TAG:-latest}
+    build:
+      context: ../rsig
+      dockerfile: Dockerfile
+    container_name: rsig-app
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DB_DSN: pgsql:host=db;port=5432;dbname=mabase
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+      DYN_TENANT_ID: ${DYN_TENANT_ID}
+      DYN_CLIENT_ID: ${DYN_CLIENT_ID}
+      DYN_CLIENT_SECRET: ${DYN_CLIENT_SECRET}
+    expose:
+      - "80"
+
+  nginx:
+    image: nginx:alpine
+    container_name: rsig-nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/rsig.conf:/etc/nginx/conf.d/default.conf:ro
+      - /var/log/nginx:/var/log/nginx
+      - /etc/letsencrypt/live/rcarto.rtaxes-geometre-expert.fr/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+      - /etc/letsencrypt/live/rcarto.rtaxes-geometre-expert.fr/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+
+volumes:
+  pgdata:
