@@ -328,7 +328,7 @@ Flight::route('GET /api/taux/departements', function () {
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
                    ROUND(AVG(tc.$champ::numeric)::numeric, 4) AS valeur_affichee,
-                   ST_AsGeoJSON(d.geom,4)::text AS geojson
+                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(d.geom, 0.01),4)::text AS geojson
             FROM departements_geom_4326 d
             JOIN taux_clean tc ON lpad(tc.dep,2,'0') = d.code_insee
             WHERE tc.$champ IS NOT NULL
@@ -366,7 +366,7 @@ Flight::route('GET /api/coeff/clusters', function () {
     $champ = validateChamp(Flight::request()->query['champ'] ?? '', COEFF_CHAMPS, 'coeff_2026');
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $sql = "SELECT codecommune, $champ AS valeur, nb_parcelles,
-                   ST_AsGeoJSON(geom::geometry, 5)::text AS geojson
+                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom::geometry, 0.001), 5)::text AS geojson
             FROM coeff_clusters WHERE $champ IS NOT NULL ORDER BY codecommune";
     $stmt = $db->query($sql);
     Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
@@ -485,7 +485,7 @@ Flight::route('GET /api/tarifs/departements', function () {
     $col   = "val_$annee";
     $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
                    t_avg.valeur,
-                   ST_AsGeoJSON(d.geom,4)::text AS geojson
+                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(d.geom, 0.01),4)::text AS geojson
             FROM departements_geom_4326 d
             JOIN (
                 SELECT dep AS code_dep, ROUND(AVG($col::numeric),2) AS valeur
