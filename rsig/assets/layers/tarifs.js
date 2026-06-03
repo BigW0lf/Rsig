@@ -1,9 +1,10 @@
-import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks } from '../utils.js';
+import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
-import { showInfo, irow } from '../panel.js';
+import { showInfo, clearInfo, irow } from '../panel.js';
 
-let active = false;
+let active    = false;
 let abortCtrl = null;
+let loadId    = 0;
 const cache        = {};
 const globalBreaks = {};
 
@@ -45,13 +46,15 @@ function upsert(map, fc, color) {
         map.getSource('tarifs-src').setData(fc);
         map.setPaintProperty('tarifs-fill', 'fill-color', color);
     } else {
-        if (map.getSource('tarifs-src')) { map.removeLayer('tarifs-line'); map.removeSource('tarifs-src'); }
+        ['tarifs-fill','tarifs-line'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
+        if (map.getSource('tarifs-src')) map.removeSource('tarifs-src');
         map.addSource('tarifs-src', { type: 'geojson', data: fc });
         map.addLayer({ id: 'tarifs-fill', type: 'fill', source: 'tarifs-src', paint: { 'fill-color': color, 'fill-opacity': 0.7 } });
         map.addLayer({ id: 'tarifs-line', type: 'line', source: 'tarifs-src', paint: { 'line-color': '#444', 'line-width': 0.5 } });
         map.on('mouseenter', 'tarifs-fill', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'tarifs-fill', () => map.getCanvas().style.cursor = '');
     }
+    bddOnTop(map);
 }
 
 function remove(map) {
@@ -61,33 +64,28 @@ function remove(map) {
 
 export function loadTarifs(map) {
     if (!active) return;
-    const catEl   = document.getElementById('tarifs-cat');
-    const anneeEl = document.getElementById('tarifs-annee');
-    const cat     = catEl.value;
-    const annee   = anneeEl.value;
+    const cat   = document.getElementById('tarifs-cat').value;
+    const annee = document.getElementById('tarifs-annee').value;
     if (!cat) return;
 
-    const zoom  = map.getZoom();
-    const level = getLevel(zoom);
-    const levelInfo = document.getElementById('tarifs-level-info');
-    if (levelInfo) {
-        const labels = { dept: 'Niveau : département (zoom < 9)', commune: 'Niveau : commune (zoom < 13)', section: 'Niveau : section (zoom ≥ 13)' };
-        levelInfo.textContent = labels[level];
-    }
+    const level  = getLevel(map.getZoom());
+    const myId   = ++loadId;
 
     getBreaks(cat, annee, globalB => {
+        if (myId !== loadId) return;
         const render = (fc, renderLevel) => {
+            if (myId !== loadId) return;
             if (getLevel(map.getZoom()) !== renderLevel) return;
             if (!fc?.features?.length) {
                 if (map.getSource('tarifs-src')) map.getSource('tarifs-src').setData({ type: 'FeatureCollection', features: [] });
                 return;
             }
-            const breaks = globalB ?? computeBreaks(fc.features.map(f => +f.properties.valeur).filter(v => isFinite(v)), 7);
-            upsert(map, fc, stepExpr('valeur', breaks, PAL.tarifs));
+            const breaks      = globalB ?? computeBreaks(fc.features.map(f => +f.properties.valeur).filter(v => isFinite(v)), 7);
             const niveauLabel = { dept: 'départements', commune: 'communes', section: 'sections' }[renderLevel];
-            const title = renderLevel === 'section'
+            const title       = renderLevel === 'section'
                 ? `${cat} — ${annee} (${niveauLabel})`
                 : `${cat} — ${annee} — moy. par ${niveauLabel.slice(0,-1)}`;
+            upsert(map, fc, stepExpr('valeur', breaks, PAL.tarifs));
             saveLegend('tarifs', title, breaks, PAL.tarifs, ' €/m²');
         };
 
@@ -120,40 +118,40 @@ export function initTarifs(map, catsReady) {
     toggle.addEventListener('change', () => {
         active = toggle.checked;
         options.classList.toggle('hidden', !active);
-        if (!active) { remove(map); dropLegend('tarifs'); }
+        if (!active) { remove(map); dropLegend('tarifs'); clearInfo('tarifs'); }
         else loadTarifs(map);
     });
-    catEl.addEventListener('change', () => loadTarifs(map));
-    anneeEl.addEventListener('change', () => loadTarifs(map));
+    catEl.addEventListener('change',   () => { clearInfo('tarifs'); loadTarifs(map); });
+    anneeEl.addEventListener('change', () => { clearInfo('tarifs'); loadTarifs(map); });
 
     map.on('click', 'tarifs-fill', e => {
         const p     = e.features[0].properties;
         const annee = anneeEl.value;
         if (p.section) {
+            const esc  = v => String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
             const rows = [2017,2019,2020,2021,2022,2023,2024,2025,2026]
                 .filter(y => p[`val_${y}`] != null)
-                .map(y => `<tr><td>${y}</td><td>${p['val_'+y]} €/m²</td></tr>`)
+                .map(y => `<tr><td>${y}</td><td>${esc(p['val_'+y])} €/m²</td></tr>`)
                 .join('');
-            showInfo(`Section ${p.section} — ${p.nom_com}`, `
-                ${irow('Commune', p.nom_com)}
-                ${irow('INSEE', p.code_insee)}
-                ${irow('Secteur', p.secteur)}
-                ${irow('Catégorie', p.categorie)}
-                ${irow(`Tarif ${annee}`, p.valeur != null ? p.valeur+' €/m²' : '–')}
-                <div class="info-row"><span class="info-label">Évolution</span></div>
-                <table class="evol-table"><tr><th>Année</th><th>Tarif</th></tr>${rows}</table>
-            `);
+            showInfo('tarifs', `${p.nom_com} (${p.code_dep}) — Section ${p.section}`,
+                irow('INSEE', p.code_insee) +
+                irow('Secteur', p.secteur) +
+                irow('Catégorie', p.categorie) +
+                irow(`Tarif ${annee}`, p.valeur != null ? p.valeur+' €/m²' : '–') +
+                `<div class="info-row"><span class="info-label">Évolution</span></div>
+                <table class="evol-table"><tr><th>Année</th><th>Tarif</th></tr>${rows}</table>`
+            );
         } else if (p.code_insee) {
-            showInfo(`${p.nom_com} (${p.code_insee})`, `
-                ${irow('Département', p.code_dep)}
-                ${irow('Tarif moyen '+annee, p.valeur != null ? p.valeur+' €/m²' : '–')}
-                <div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez pour voir le détail par section</div>
-            `);
+            showInfo('tarifs', `${p.nom_com} (${p.code_dep})`,
+                irow('INSEE', p.code_insee) +
+                irow('Tarif moyen '+annee, p.valeur != null ? p.valeur+' €/m²' : '–') +
+                `<div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez pour voir le détail par section</div>`
+            );
         } else {
-            showInfo(`${p.nom_dep ?? 'Département'} (${p.code_dep})`, `
-                ${irow('Tarif moyen '+annee, p.valeur != null ? p.valeur+' €/m²' : '–')}
-                <div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez pour voir le détail par commune ou section</div>
-            `);
+            showInfo('tarifs', `${p.nom_dep ?? 'Département'} (${p.code_dep})`,
+                irow('Tarif moyen '+annee, p.valeur != null ? p.valeur+' €/m²' : '–') +
+                `<div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez pour voir le détail par commune ou section</div>`
+            );
         }
     });
 

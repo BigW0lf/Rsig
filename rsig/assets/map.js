@@ -1,9 +1,11 @@
 import { debounce } from './utils.js';
-import { updateWfs, getWfsType } from './wfs.js';
-import { initTaux, loadTaux }    from './layers/taux.js';
-import { initCoeff, loadCoeff }  from './layers/coeff.js';
-import { initDossiers }          from './layers/dossiers.js';
-import { initTarifs, loadTarifs } from './layers/tarifs.js';
+import { updateWfs }    from './wfs.js';
+import { initTaux }     from './layers/taux.js';
+import { initCoeff }    from './layers/coeff.js';
+import { initDossiers } from './layers/dossiers.js';
+import { initTarifs }   from './layers/tarifs.js';
+import { initSections }          from './layers/sections.js';
+import { initCfe }               from './layers/cfe.js';
 
 // Pré-charge les catégories tarifs avant que la carte soit prête
 const catsReady = fetch('/api/tarifs/categories').then(r => r.json()).catch(() => []);
@@ -23,9 +25,22 @@ const map = new maplibregl.Map({
                     + '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}'
                 ],
                 tileSize: 256, maxzoom: 19, attribution: 'IGN-F/Géoportail',
-            }
+            },
+            ign_labels: {
+                type: 'raster',
+                tiles: [
+                    'https://data.geopf.fr/wmts?REQUEST=GetTile&SERVICE=WMTS&VERSION=1.0.0'
+                    + '&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png'
+                    + '&LAYER=GEOGRAPHICALNAMES.NAMES'
+                    + '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}'
+                ],
+                tileSize: 256, maxzoom: 19, attribution: 'IGN-F/Géoportail',
+            },
         },
-        layers: [{ id: 'ign-ortho', type: 'raster', source: 'ign_ortho' }],
+        layers: [
+            { id: 'ign-ortho',  type: 'raster', source: 'ign_ortho' },
+            { id: 'ign-labels', type: 'raster', source: 'ign_labels' },
+        ],
     },
     center: [2.35, 46.6],
     zoom: 6,
@@ -62,24 +77,33 @@ window.afficherSurCarte = function (lat, lon, classif) {
 };
 
 map.on('load', () => {
-    const taux    = initTaux(map);
-    const coeff   = initCoeff(map);
+    const taux     = initTaux(map);
+    const coeff    = initCoeff(map);
     const dossiers = initDossiers(map);
-    const tarifs  = initTarifs(map, catsReady);
+    const tarifs   = initTarifs(map, catsReady);
+    const sections = initSections(map);
+    const cfe      = initCfe(map);
 
-    function refreshZoomInfo() {
-        const el = document.getElementById('zoom-info');
-        if (el) el.textContent = `Zoom : ${Math.round(map.getZoom() * 10) / 10}`;
-    }
+    // Peupler le select catégorie CFE (même liste que tarifs)
+    catsReady.then(cats => {
+        const sel = document.getElementById('cfe-categorie');
+        if (sel && cats.length) {
+            cats.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c; opt.textContent = c;
+                sel.appendChild(opt);
+            });
+        }
+    });
 
     map.on('moveend', debounce(() => {
-        refreshZoomInfo();
         updateWfs(map);
-        if (taux.isActive())    taux.load();
-        if (coeff.isActive())   coeff.load();
-        if (tarifs.isActive())  tarifs.load();
+        if (taux.isActive())     taux.load();
+        if (coeff.isActive())    coeff.load();
+        if (tarifs.isActive())   tarifs.load();
+        if (sections.isActive()) sections.load();
+        if (cfe.isActive())      cfe.load();
     }, 400));
 
-    map.on('zoomend', refreshZoomInfo);
     updateWfs(map);
 });

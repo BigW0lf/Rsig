@@ -39,9 +39,31 @@ export function fmtVal(v, suffix) {
 
 // ── Palettes ──────────────────────────────────────────────
 export const PAL = {
-    taux:    ['#bfdbfe', '#60a5fa', '#3b82f6', '#1d4ed8', '#1e3a6e'],
-    coeff:   ['#1d4ed8','#60a5fa','#bfdbfe','#e0f2fe','#f8fafc','#fecaca','#f87171','#ef4444','#7f1d1d'],
+    taux:    ['#4a148c', '#7b1fa2', '#ab47bc', '#42a5f5', '#b3e5fc'],
+    coeff:   ['#ffffff', '#fee2e2', '#fca5a5', '#f87171', '#ef4444', '#b91c1c'],
     coeffEv: ['#b91c1c', '#f97316', '#facc15', '#86efac', '#16a34a'],
-    tarifs:  ['#1a9850', '#91cf60', '#d9ef8b', '#fee08b', '#fc8d59', '#d73027', '#a50026'],
+    tarifs:  ['#e65100', '#fb8c00', '#ffa726', '#ffcc80', '#dce775', '#c5e1a5', '#a5d6a7'],
     tf:      ['#eff6ff', '#93c5fd', '#3b82f6', '#1d4ed8', '#1e3a6e'],
+    cfe:     ['#ffffb2', '#fed976', '#feb24c', '#fd8d3c', '#f03b20', '#bd0026'],
 };
+
+// ── Ordre des couches (appelé après chaque rendu) ─────────
+export function bddOnTop(map) {
+    // 1. Taux/tarifs/sections/CFE en bas
+    ['taux-fill','taux-line','tarifs-fill','tarifs-line','sections-fill','cfe-fill','cfe-line'].forEach(id => {
+        if (map.getLayer(id)) map.moveLayer(id);
+    });
+    // 2. Coeff polygones (hachures) au-dessus
+    for (let i = 0; i < 10; i++) {
+        if (map.getLayer(`coeff-hatch-${i}`)) map.moveLayer(`coeff-hatch-${i}`);
+    }
+    ['coeff-fill','coeff-line'].forEach(id => { if (map.getLayer(id)) map.moveLayer(id); });
+    // 3. Clusters coeff (points) au-dessus des polygones
+    ['coeff-cluster-circle','coeff-cluster-cluster','coeff-cluster-count'].forEach(id => {
+        if (map.getLayer(id)) map.moveLayer(id);
+    });
+    // 4. Dossiers tout en haut
+    ['dossiers-circle','dossiers-cluster','dossiers-cluster-count'].forEach(id => {
+        if (map.getLayer(id)) map.moveLayer(id);
+    });
+}

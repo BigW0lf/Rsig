@@ -3,8 +3,8 @@
  * Synchronisation Dataverse → PostgreSQL (UPSERT incrémental)
  *
  * Coordonnées priorité :
- *  1. apo_x / apo_y (Lambert 93) dans apo_sites → ST_Transform vers WGS84
- *  2. x / y de dossier_acc_geo (SRID 3857) → site_id comme clé
+ *  1. apo_x / apo_y (Web Mercator SRID 3857) dans apo_sites → ST_Transform vers WGS84
+ *  2. Coords de dossier_acc_geo (SRID 2154, Lambert 93) → site_id comme clé
  *  3. Géocodage IGN uniquement si aucune source n'a de coord
  *
  * Client : FormattedValue OData — aucun appel HTTP supplémentaire
@@ -90,7 +90,7 @@ function crmSync(PDO $db): array {
 
         foreach (_fetchAllPages($token, $url) as $site) {
             $siteId = $site['apo_siteid'] ?? null;
-            // apo_x/apo_y sont en SRID 3857 (Web Mercator), pas Lambert 93
+            // apo_x/apo_y Dataverse : Web Mercator SRID 3857
             $x3857 = isset($site['apo_x']) && $site['apo_x'] !== '' ? (float)$site['apo_x'] : null;
             $y3857 = isset($site['apo_y']) && $site['apo_y'] !== '' ? (float)$site['apo_y'] : null;
 

@@ -48,11 +48,16 @@ function validateAnnee(string $annee): string {
     return in_array($annee, $valid, true) ? $annee : '2025';
 }
 
+function validateMillesime(string $m): string {
+    return (preg_match('/^\d{4}$/', $m) && (int)$m >= 2010 && (int)$m <= 2035) ? $m : '2025';
+}
+
 const TAUX_CHAMPS = [
-    'taux_fnb_commune','taux_fnb_syndicats_net','taux_fnb_gfp_vote',
-    'taux_tafnb_commune_net','taux_tafnb_gfp_net','taux_tse_net',
-    'taux_tse_gemapi_net','taux_fb_commune_vote','taux_fb_syndicats_net',
-    'taux_fb_gfp_vote','taux_teom_plein',
+    // TFPB
+    'taux_fb_commune_vote','taux_fb_syndicats_net','taux_fb_gfp_vote',
+    'taux_tse_net','taux_tafnb_commune_net','taux_teom_plein','taux_tse_gemapi_net',
+    // TFPNB
+    'taux_fnb_commune','taux_fnb_syndicats_net','taux_fnb_gfp_vote','taux_tafnb_gfp_net',
 ];
 
 const COEFF_CHAMPS = ['coeff_2017','coeff_2018','coeff_2019','coeff_2020','coeff_2024','coeff_2026'];

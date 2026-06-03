@@ -215,11 +215,14 @@ document.querySelectorAll('.tab').forEach(tab => {
 });
 
 // ── Rendu tableau ─────────────────────────────────────────
+function _esc(v) {
+    return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 function renderTable(cols, rows, container) {
     if (!cols.length) { container.innerHTML = ''; return; }
-    const ths = cols.map(c => `<th>${c}</th>`).join('');
+    const ths = cols.map(c => `<th>${_esc(c)}</th>`).join('');
     const trs = rows.map(r =>
-        '<tr>' + cols.map(c => `<td title="${String(r[c]??'').replace(/"/g,'&quot;')}">${r[c]??''}</td>`).join('') + '</tr>'
+        '<tr>' + cols.map(c => `<td title="${_esc(r[c])}">${_esc(r[c])}</td>`).join('') + '</tr>'
     ).join('');
     container.innerHTML = `<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
 }

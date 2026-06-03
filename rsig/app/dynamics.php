@@ -11,16 +11,23 @@ function getAccessToken(): string {
             'scope'         => DYN_SCOPE,
         ]),
         CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 15,
     ]);
-    $json = json_decode(curl_exec($ch), true);
+    $raw  = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
+    if ($raw === false || $code !== 200) return '';
+    $json = json_decode($raw, true);
     return $json['access_token'] ?? '';
 }
 
 function callDynamics(string $value, string $field, string $table): array {
     $token = getAccessToken();
+    if (!$token) return ['error' => 'Token indisponible'];
+    // Échapper la valeur pour OData : doubler les apostrophes (standard OData)
+    $safeValue = str_replace("'", "''", $value);
     $url   = "https://rtaxes.api.crm4.dynamics.com/api/data/v9.2/$table"
-           . '?$filter=' . urlencode("$field eq '" . addslashes($value) . "'")
+           . '?$filter=' . urlencode("$field eq '$safeValue'")
            . '&$top=5';
 
     $ch = curl_init($url);
@@ -31,8 +38,11 @@ function callDynamics(string $value, string $field, string $table): array {
             "OData-Version: 4.0",
         ],
         CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 15,
     ]);
-    $result = json_decode(curl_exec($ch), true);
+    $raw  = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    return $result ?? [];
+    if ($raw === false || $code !== 200) return ['error' => 'Dynamics ' . $code];
+    return json_decode($raw, true) ?? [];
 }

@@ -1,6 +1,6 @@
-import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks } from '../utils.js';
+import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
-import { showInfo, irow } from '../panel.js';
+import { showInfo, clearInfo, irow } from '../panel.js';
 
 let active = false;
 let abortCtrl    = null;
@@ -26,13 +26,22 @@ function fetchLayer(url, onData) {
         .catch(e => { hideSpinner(); if (e.name !== 'AbortError') console.error('coeff', e); });
 }
 
+function equalIntervalBreaks(min, max, n) {
+    const step = (max - min) / n;
+    return Array.from({ length: n + 1 }, (_, i) => +(min + i * step).toFixed(4));
+}
+
 function getBreaks(champ, cb) {
     const key = champ === 'evolution' ? '_evol_global' : champ;
     if (globalBreaks[key]) { cb(globalBreaks[key]); return; }
     const apiChamp = champ === 'evolution' ? 'coeff_2026' : champ;
     fetch(`/api/coeff/stats?champ=${apiChamp}`)
         .then(r => r.json())
-        .then(b => { globalBreaks[key] = b; cb(b); })
+        .then(([vmin, vmax]) => {
+            const breaks = equalIntervalBreaks(vmin, vmax, 6);
+            globalBreaks[key] = breaks;
+            cb(breaks);
+        })
         .catch(() => cb(null));
 }
 
@@ -43,24 +52,91 @@ function getVal(p, champ) {
     return p[champ] != null ? +p[champ] : null;
 }
 
-function upsertPoly(map, fc, color) {
+// Génère un pattern hachuré en biais pour une couleur donnée (traits colorés, fond transparent)
+function makeHatchImage(color, key) {
+    const size = 10;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    // Diagonale /
+    ctx.beginPath(); ctx.moveTo(-1, size + 1); ctx.lineTo(size + 1, -1); ctx.stroke();
+    // Répétition pour couvrir les bords
+    ctx.beginPath(); ctx.moveTo(-1, 1); ctx.lineTo(1, -1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(size - 1, size + 1); ctx.lineTo(size + 1, size - 1); ctx.stroke();
+    const imgData = ctx.getImageData(0, 0, size, size);
+    return { width: size, height: size, data: imgData.data };
+}
+
+// Cache des patterns créés par couleur hex
+const _hatchCache = {};
+function ensureHatchForColor(map, colorHex, key) {
+    if (map.hasImage(key)) return;
+    map.addImage(key, makeHatchImage(colorHex, key), { pixelRatio: 2 });
+    _hatchCache[key] = true;
+}
+
+// Crée une source GeoJSON séparée par classe de couleur pour le hachurage
+function buildHatchSources(map, fc, breaks, palette, propKey, beforeLayer) {
+    // Nettoie les sources de hachures précédentes
+    for (let i = 0; i < 12; i++) {
+        if (map.getLayer(`coeff-hatch-${i}`)) map.removeLayer(`coeff-hatch-${i}`);
+        if (map.getSource(`coeff-hatch-src-${i}`)) map.removeSource(`coeff-hatch-src-${i}`);
+    }
+    if (!breaks?.length) return;
+    palette.forEach((col, i) => {
+        const key = `coeff-hatch-img-${col.replace('#','')}`;
+        ensureHatchForColor(map, col, key);
+        // Features de cette classe
+        const lo = breaks[i] ?? -Infinity;
+        const hi = breaks[i + 1] ?? Infinity;
+        const feats = fc.features.filter(f => {
+            const v = f.properties[propKey];
+            return v != null && +v >= lo && (i === palette.length - 1 ? true : +v < hi);
+        });
+        if (!feats.length) return;
+        const srcId = `coeff-hatch-src-${i}`;
+        map.addSource(srcId, { type: 'geojson', data: { type: 'FeatureCollection', features: feats } });
+        map.addLayer({ id: `coeff-hatch-${i}`, type: 'fill', source: srcId,
+            paint: { 'fill-pattern': key } }, beforeLayer);
+    });
+}
+
+function upsertPoly(map, fc, color, breaks, palette, propKey) {
+    // Coeff au-dessus de taux/tarifs, sous les dossiers
+    const beforeLayer = map.getLayer('dossiers-circle') ? 'dossiers-circle' : undefined;
+
     if (map.getLayer('coeff-fill')) {
         map.getSource('coeff-src').setData(fc);
-        map.setPaintProperty('coeff-fill', 'fill-color', color);
         map.setLayoutProperty('coeff-fill', 'visibility', 'visible');
         map.setLayoutProperty('coeff-line', 'visibility', 'visible');
+        buildHatchSources(map, fc, breaks, palette, propKey, beforeLayer);
     } else {
-        if (map.getSource('coeff-src')) { map.removeLayer('coeff-line'); map.removeSource('coeff-src'); }
+        if (map.getSource('coeff-src')) {
+            ['coeff-line','coeff-fill'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
+            map.removeSource('coeff-src');
+        }
         map.addSource('coeff-src', { type: 'geojson', data: fc });
-        map.addLayer({ id: 'coeff-fill', type: 'fill', source: 'coeff-src', paint: { 'fill-color': color, 'fill-opacity': 0.75 } });
-        map.addLayer({ id: 'coeff-line', type: 'line', source: 'coeff-src', paint: { 'line-color': '#666', 'line-width': 0.5 } });
+        // Fond transparent — on voit le fond de carte
+        map.addLayer({ id: 'coeff-fill', type: 'fill', source: 'coeff-src',
+            paint: { 'fill-color': 'rgba(0,0,0,0)' } }, beforeLayer);
+        map.addLayer({ id: 'coeff-line', type: 'line', source: 'coeff-src',
+            paint: { 'line-color': color, 'line-width': 0.8 } }, beforeLayer);
         map.on('mouseenter', 'coeff-fill', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'coeff-fill', () => map.getCanvas().style.cursor = '');
+        buildHatchSources(map, fc, breaks, palette, propKey, beforeLayer);
     }
+    bddOnTop(map);
 }
 
 function removePoly(map) {
-    ['coeff-fill','coeff-line'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
+    for (let i = 0; i < 12; i++) {
+        if (map.getLayer(`coeff-hatch-${i}`)) map.removeLayer(`coeff-hatch-${i}`);
+        if (map.getSource(`coeff-hatch-src-${i}`)) map.removeSource(`coeff-hatch-src-${i}`);
+    }
+    ['coeff-line','coeff-fill'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
     if (map.getSource('coeff-src')) map.removeSource('coeff-src');
 }
 
@@ -79,7 +155,7 @@ function showClusters(map, champ, globalB) {
     const apply = fc => {
         if (!fc?.features?.length) return;
         fc.features.forEach(f => { f.properties._cv = isEvol ? null : +f.properties.valeur; });
-        const breaks = globalB ?? computeBreaks(fc.features.map(f => f.properties._cv).filter(v => v != null && isFinite(v)), 5);
+        const breaks = globalB ?? computeBreaks(fc.features.map(f => f.properties._cv).filter(v => v != null && isFinite(v)), 6);
         const color  = stepExpr('_cv', breaks, pal);
         const src = 'coeff-cluster-src';
 
@@ -97,7 +173,7 @@ function showClusters(map, champ, globalB) {
             map.addLayer({ id: 'coeff-cluster-cluster', type: 'circle', source: src,
                 filter: ['has', 'point_count'],
                 paint: {
-                    'circle-color': ['step', ['get', 'point_count'], pal[1], 5, pal[2], 20, pal[3], 50, pal[4]],
+                    'circle-color': ['step', ['get', 'point_count'], pal[2], 5, pal[3], 20, pal[4], 50, pal[5]],
                     'circle-radius': ['step', ['get', 'point_count'], 10, 5, 14, 20, 18, 50, 24],
                     'circle-stroke-width': 2, 'circle-stroke-color': 'rgba(255,255,255,.7)',
                 } });
@@ -118,15 +194,16 @@ function showClusters(map, champ, globalB) {
             });
             map.on('click', 'coeff-cluster-circle', e => {
                 const p = e.features[0].properties;
-                showInfo(`Commune ${p.codecommune}`, `
+                showInfo('coeff', `Commune ${p.codecommune}`, `
                     ${irow('Code commune', p.codecommune)}
                     ${irow('Coeff moyen', p.valeur)}
                     ${irow('Nb parcelles', p.nb_parcelles)}
-                    <div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 12 pour voir le détail par parcelle</div>
+                    <div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 13 pour voir le détail par parcelle</div>
                 `);
             });
         }
 
+        bddOnTop(map);
         const suffix = isEvol ? ' %' : '';
         saveLegend('coeff', document.getElementById('coeff-champ').options[document.getElementById('coeff-champ').selectedIndex].text + ' (communes)', breaks, pal, suffix);
     };
@@ -145,6 +222,9 @@ export function loadCoeff(map) {
         if (map.getLayer('coeff-fill')) {
             map.setLayoutProperty('coeff-fill', 'visibility', 'none');
             map.setLayoutProperty('coeff-line', 'visibility', 'none');
+            for (let i = 0; i < 12; i++) {
+                if (map.getLayer(`coeff-hatch-${i}`)) map.setLayoutProperty(`coeff-hatch-${i}`, 'visibility', 'none');
+            }
         }
         getBreaks(champ, globalB => showClusters(map, champ, globalB));
         return;
@@ -162,8 +242,8 @@ export function loadCoeff(map) {
             if (!fc?.features?.length) return;
             const propKey = isEvol ? '_evol' : champ;
             fc.features.forEach(f => { f.properties[propKey] = getVal(f.properties, champ); });
-            const breaks = globalB ?? computeBreaks(fc.features.map(f => f.properties[propKey]).filter(v => v != null && isFinite(v)), 5);
-            upsertPoly(map, fc, stepExpr(propKey, breaks, pal));
+            const breaks = globalB ?? computeBreaks(fc.features.map(f => f.properties[propKey]).filter(v => v != null && isFinite(v)), 6);
+            upsertPoly(map, fc, pal[pal.length - 1], breaks, pal, propKey);
             saveLegend('coeff', champEl.options[champEl.selectedIndex].text, breaks, pal, isEvol ? ' %' : '');
         });
     });
@@ -177,19 +257,20 @@ export function initCoeff(map) {
     toggle.addEventListener('change', () => {
         active = toggle.checked;
         options.classList.toggle('hidden', !active);
-        if (!active) { removePoly(map); removeClusters(map); dropLegend('coeff'); polyCache = null; }
+        if (!active) { removePoly(map); removeClusters(map); dropLegend('coeff'); clearInfo('coeff'); polyCache = null; }
         else loadCoeff(map);
     });
-    champEl.addEventListener('change', () => { polyCache = null; clusterCache = null; loadCoeff(map); });
+    champEl.addEventListener('change', () => { polyCache = null; clusterCache = null; clearInfo('coeff'); loadCoeff(map); });
 
     map.on('click', 'coeff-fill', e => {
         const p    = e.features[0].properties;
         const evol = (p.coeff_2026 != null && p.coeff_2017 != null && +p.coeff_2017 !== 0)
             ? ((+p.coeff_2026 - +p.coeff_2017) / +p.coeff_2017 * 100).toFixed(1) : null;
         const cls  = evol > 0 ? 'tag-up' : evol < 0 ? 'tag-down' : '';
-        showInfo(`Parcelle ${p.idu}`, `
+        const esc = v => String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const html = `
             ${irow('IDU', p.idu)}
-            ${irow('Commune', p.codecommune)}
+            ${irow('Commune', p.nom_commune ? `${esc(p.nom_commune)} (${esc(p.codecommune)})` : esc(p.codecommune))}
             ${irow('Section', p.section)}
             ${irow('Parcelle', p.parcelle)}
             <div class="info-row">
@@ -199,10 +280,12 @@ export function initCoeff(map) {
             <table class="evol-table">
                 <tr><th>Année</th><th>Coeff</th></tr>
                 ${[2017,2018,2019,2020,2024,2026].map(y =>
-                    `<tr><td>${y}</td><td>${p['coeff_'+y] ?? '–'}</td></tr>`
+                    `<tr><td>${y}</td><td>${esc(p['coeff_'+y] ?? '–')}</td></tr>`
                 ).join('')}
-            </table>
-        `);
+            </table>`;
+        const commune = p.nom_commune ? `${p.nom_commune} (${p.codecommune})` : p.codecommune;
+        const title = `${commune} — Section ${p.section} · Parcelle ${p.parcelle}`;
+        showInfo('coeff', title, html);
     });
 
     return { load: () => loadCoeff(map), isActive: () => active };

@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css" crossorigin="">
     <link rel="stylesheet" href="assets/style.css">
     <style>
-        /* Évite le FOUC : body invisible jusqu'au premier paint avec CSS */
         body { opacity: 0; transition: opacity .15s; }
         body.ready { opacity: 1; }
     </style>
@@ -32,11 +31,12 @@
     <span class="nav-user"><?= htmlspecialchars($_SESSION['user_name'] ?? '') ?></span>
     <a href="/auth/logout" class="nav-logout" title="Déconnexion">&#x2715;</a>
 </nav>
-<!-- Iframes pages secondaires — chargées une seule fois, gardent leur état -->
+
+<!-- Iframes pages secondaires -->
 <div id="page-overlay" style="display:none;position:fixed;top:48px;left:0;right:0;bottom:0;z-index:100;flex-direction:column">
-    <iframe id="iframe-donnees"  src=""  style="width:100%;height:100%;border:none;display:none"></iframe>
-    <iframe id="iframe-requetes" src=""  style="width:100%;height:100%;border:none;display:none"></iframe>
-    <iframe id="iframe-crm"      src=""  style="width:100%;height:100%;border:none;display:none"></iframe>
+    <iframe id="iframe-donnees"  src="" style="width:100%;height:100%;border:none;display:none"></iframe>
+    <iframe id="iframe-requetes" src="" style="width:100%;height:100%;border:none;display:none"></iframe>
+    <iframe id="iframe-crm"      src="" style="width:100%;height:100%;border:none;display:none"></iframe>
 </div>
 
 <div id="app">
@@ -45,121 +45,143 @@
     <aside id="panel-left">
         <div class="panel-left-head">Couches</div>
 
-        <!-- Zoom courant -->
-        <div id="zoom-info">Zoom : —</div>
-
-        <!-- Fond cadastral (info seule) -->
-        <div class="layer-group">
-            <div class="layer-group-title">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        <!-- Fond cadastral IGN (informatif) -->
+        <div class="layer-row">
+            <span class="layer-row-label layer-row-label--static">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
                 Fond cadastral IGN
-            </div>
-            <div class="layer-item" style="font-size:11px;color:var(--text3);padding-bottom:8px">
-                Orthophotos + limites selon zoom
-            </div>
+            </span>
+            <span class="layer-row-hint">ortho + limites selon zoom</span>
         </div>
 
         <!-- Taux fiscaux -->
-        <div class="layer-group">
-            <div class="layer-group-title">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
+        <div class="layer-row">
+            <label class="layer-toggle">
+                <input type="checkbox" id="toggle-taux">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 20h20M5 20V10m4 10V4m4 16v-7m4 7V8"/></svg>
                 Taux fiscaux
-            </div>
-            <div class="layer-item">
-                <label class="layer-toggle">
-                    <input type="checkbox" id="toggle-taux">
-                    <span>Taux fiscaux</span>
+            </label>
+            <div id="taux-options" class="layer-sub hidden">
+                <label>Taux
+                    <select id="taux-champ">
+                        <optgroup label="TFPB — Taxe foncière bâti">
+                            <option value="taux_fb_commune_vote">TFPB Commune</option>
+                            <option value="taux_fb_syndicats_net">TFPB Syndicat</option>
+                            <option value="taux_fb_gfp_vote">TFPB EPCI</option>
+                            <option value="taux_tse_net">TFPB TSE</option>
+                            <option value="taux_tafnb_commune_net">TFPB TASA</option>
+                            <option value="taux_teom_plein">TFPB TEOM</option>
+                            <option value="taux_tse_gemapi_net">TFPB GEMAPI</option>
+                        </optgroup>
+                        <optgroup label="TFPNB — Taxe foncière non bâti">
+                            <option value="taux_fnb_commune">TFPNB Commune</option>
+                            <option value="taux_fnb_syndicats_net">TFPNB Syndicat</option>
+                            <option value="taux_fnb_gfp_vote">TFPNB EPCI</option>
+                            <option value="taux_tafnb_gfp_net">TFPNB TASA EPCI</option>
+                        </optgroup>
+                    </select>
                 </label>
-                <div id="taux-options" class="sub-options hidden">
-                    <div id="taux-level-info" style="font-size:11px;color:var(--text3);margin-bottom:4px"></div>
-                    <label>Champ
-                        <select id="taux-champ">
-                            <option value="taux_fb_commune_vote">TF bâti commune</option>
-                            <option value="taux_fnb_commune">TF non bâti commune</option>
-                            <option value="taux_fnb_gfp_vote">TF non bâti GFP</option>
-                            <option value="taux_tafnb_commune_net">TAFNB commune net</option>
-                            <option value="taux_tafnb_gfp_net">TAFNB GFP net</option>
-                            <option value="taux_tse_net">TSE net</option>
-                            <option value="taux_tse_gemapi_net">TSE GEMAPI net</option>
-                            <option value="taux_fb_gfp_vote">TF bâti GFP</option>
-                            <option value="taux_teom_plein">TEOM</option>
-                        </select>
-                    </label>
-                </div>
+                <label>Millésime
+                    <select id="taux-millesime"><option value="2025">2025</option></select>
+                </label>
             </div>
         </div>
 
         <!-- Coefficients de localisation -->
-        <div class="layer-group">
-            <div class="layer-group-title">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10H3M21 6H3M21 14H3M21 18H3"/></svg>
-                Coeff. de localisation
-            </div>
-            <div class="layer-item">
-                <label class="layer-toggle">
-                    <input type="checkbox" id="toggle-coeff">
-                    <span>Parcelles</span>
+        <div class="layer-row">
+            <label class="layer-toggle">
+                <input type="checkbox" id="toggle-coeff">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                Coeff. localisation
+            </label>
+            <div id="coeff-options" class="layer-sub hidden">
+                <label>Afficher par
+                    <select id="coeff-champ">
+                        <option value="coeff_2026">Coeff 2026</option>
+                        <option value="coeff_2024">Coeff 2024</option>
+                        <option value="coeff_2020">Coeff 2020</option>
+                        <option value="coeff_2019">Coeff 2019</option>
+                        <option value="coeff_2018">Coeff 2018</option>
+                        <option value="coeff_2017">Coeff 2017</option>
+                        <option value="evolution">Évolution 2017→2026 (%)</option>
+                    </select>
                 </label>
-                <div id="coeff-options" class="sub-options hidden">
-                    <label>Afficher par
-                        <select id="coeff-champ">
-                            <option value="coeff_2026">Coeff 2026</option>
-                            <option value="coeff_2024">Coeff 2024</option>
-                            <option value="coeff_2020">Coeff 2020</option>
-                            <option value="coeff_2019">Coeff 2019</option>
-                            <option value="coeff_2018">Coeff 2018</option>
-                            <option value="coeff_2017">Coeff 2017</option>
-                            <option value="evolution">Évolution 2017→2026 (%)</option>
-                        </select>
-                    </label>
-                </div>
             </div>
         </div>
 
-        <!-- Dossiers -->
-        <div class="layer-group">
-            <div class="layer-group-title">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
-                Dossiers
-            </div>
-            <div class="layer-item">
-                <label class="layer-toggle">
-                    <input type="checkbox" id="toggle-dossiers">
-                    <span>Points dossiers</span>
+        <!-- Secteurs cadastraux -->
+        <div class="layer-row">
+            <label class="layer-toggle">
+                <input type="checkbox" id="toggle-sections">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
+                Secteurs cadastraux
+            </label>
+            <div id="sections-options" class="layer-sub hidden"></div>
+        </div>
+
+        <!-- CFE -->
+        <div class="layer-row">
+            <label class="layer-toggle">
+                <input type="checkbox" id="toggle-cfe">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+                CFE estimée €/m²
+            </label>
+            <div id="cfe-options" class="layer-sub hidden">
+                <label>Catégorie
+                    <select id="cfe-categorie">
+                        <option value="">— choisir —</option>
+                    </select>
                 </label>
+                <label>Année
+                    <select id="cfe-annee">
+                        <option value="2026">2026</option>
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                        <option value="2023">2023</option>
+                        <option value="2022">2022</option>
+                        <option value="2021">2021</option>
+                        <option value="2020">2020</option>
+                        <option value="2019">2019</option>
+                        <option value="2017">2017</option>
+                    </select>
+                </label>
+                <div id="cfe-msg" class="layer-msg"></div>
             </div>
+        </div>
+
+        <!-- Dossiers CRM -->
+        <div class="layer-row">
+            <label class="layer-toggle">
+                <input type="checkbox" id="toggle-dossiers">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                Dossiers
+            </label>
         </div>
 
         <!-- Tarifs locatifs -->
-        <div class="layer-group">
-            <div class="layer-group-title">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        <div class="layer-row">
+            <label class="layer-toggle">
+                <input type="checkbox" id="toggle-tarifs">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                 Tarifs locatifs
-            </div>
-            <div class="layer-item">
-                <label class="layer-toggle">
-                    <input type="checkbox" id="toggle-tarifs">
-                    <span>Tarifs locatifs</span>
+            </label>
+            <div id="tarifs-options" class="layer-sub hidden">
+                <label>Catégorie
+                    <select id="tarifs-cat"><option value="">— chargement —</option></select>
                 </label>
-                <div id="tarifs-options" class="sub-options hidden">
-                    <div id="tarifs-level-info" style="font-size:11px;color:var(--text3);margin-bottom:4px"></div>
-                    <label>Catégorie
-                        <select id="tarifs-cat"><option value="">— chargement —</option></select>
-                    </label>
-                    <label>Année
-                        <select id="tarifs-annee">
-                            <option value="2026">2026</option>
-                            <option value="2025" selected>2025</option>
-                            <option value="2024">2024</option>
-                            <option value="2023">2023</option>
-                            <option value="2022">2022</option>
-                            <option value="2021">2021</option>
-                            <option value="2020">2020</option>
-                            <option value="2019">2019</option>
-                            <option value="2017">2017</option>
-                        </select>
-                    </label>
-                </div>
+                <label>Année
+                    <select id="tarifs-annee">
+                        <option value="2026">2026</option>
+                        <option value="2025" selected>2025</option>
+                        <option value="2024">2024</option>
+                        <option value="2023">2023</option>
+                        <option value="2022">2022</option>
+                        <option value="2021">2021</option>
+                        <option value="2020">2020</option>
+                        <option value="2019">2019</option>
+                        <option value="2017">2017</option>
+                    </select>
+                </label>
             </div>
         </div>
 
@@ -168,7 +190,6 @@
     <!-- ═══ CARTE ════════════════════════════════════════════ -->
     <div id="map-wrap">
         <div id="map"></div>
-        <!-- Barre de recherche centrée sur la carte -->
         <div id="search-wrap">
             <input type="search" id="search" placeholder="🔍 Rechercher une adresse…" autocomplete="off">
             <div id="resultats" class="dropdown"></div>
@@ -233,23 +254,19 @@ document.addEventListener('click', e => {
 });
 
 // ── Navigation SPA ───────────────────────────────────────
-const PAGES = { donnees: '/donnees', requetes: '/requetes', crm: '/crm' };
+const PAGES   = { donnees: '/donnees', requetes: '/requetes', crm: '/crm' };
 const overlay = document.getElementById('page-overlay');
 
 function showPage(page) {
     const isMap = (page === 'carte');
-
     overlay.style.display = isMap ? 'none' : 'flex';
-    // Rend #app inactif sans le détruire (MapLibre doit rester monté)
     const app = document.getElementById('app');
-    app.style.visibility  = isMap ? '' : 'hidden';
+    app.style.visibility   = isMap ? '' : 'hidden';
     app.style.pointerEvents = isMap ? '' : 'none';
-
     Object.keys(PAGES).forEach(p => {
         const f = document.getElementById('iframe-' + p);
         if (f) f.style.display = 'none';
     });
-
     if (!isMap) {
         const iframe = document.getElementById('iframe-' + page);
         if (iframe) {
@@ -260,21 +277,16 @@ function showPage(page) {
             iframe.style.display = 'block';
         }
     }
-
     document.querySelectorAll('nav a[data-page]').forEach(a => {
         a.classList.toggle('active', a.dataset.page === page);
     });
-
     history.pushState({ page }, '', isMap ? '/' : PAGES[page]);
 }
 
 document.querySelectorAll('nav a[data-page]').forEach(a => {
     a.addEventListener('click', e => { e.preventDefault(); showPage(a.dataset.page); });
 });
-
 window.addEventListener('popstate', e => showPage(e.state?.page || 'carte'));
-
-// Restaure la page active selon l'URL — après chargement complet pour ne pas bloquer MapLibre
 window.addEventListener('load', () => {
     const pathToPage = { '/donnees': 'donnees', '/requetes': 'requetes', '/crm': 'crm' };
     const initPage = pathToPage[location.pathname] || 'carte';

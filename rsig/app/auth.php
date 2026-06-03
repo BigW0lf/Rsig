@@ -10,6 +10,7 @@ function isAuthenticated(): bool {
 }
 
 function requireAuth(): void {
+    if (!AUTH_ENABLED) return;
     if (isAuthenticated()) return;
     authStart();
     $state = bin2hex(random_bytes(16));
