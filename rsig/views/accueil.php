@@ -149,6 +149,15 @@
             </div>
         </div>
 
+        <!-- ZFU -->
+        <div class="layer-row">
+            <label class="layer-toggle">
+                <input type="checkbox" id="toggle-zfu">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/><line x1="12" y1="2" x2="12" y2="7"/></svg>
+                ZFU — Exo. TSB
+            </label>
+        </div>
+
         <!-- Dossiers CRM -->
         <div class="layer-row">
             <label class="layer-toggle">

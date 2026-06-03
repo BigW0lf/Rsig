@@ -467,6 +467,16 @@ Flight::route('GET /api/cfe', function () {
     Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
 });
 
+// ── ZFU — Zones Franches Urbaines (IDF + PACA) ───────────
+Flight::route('GET /api/zfu', function () {
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $sql = "SELECT codquart, nom_quartier, communes,
+                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.0001), 5)::text AS geojson
+            FROM zfu ORDER BY codquart";
+    $stmt = $db->query($sql);
+    Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
+});
+
 // ── Sections cadastrales ──────────────────────────────────
 // Niveau section (zoom ≥ 13) — polygones bruts par bbox
 Flight::route('GET /api/sections', function () {

@@ -4,6 +4,7 @@ import { initTaux }     from './layers/taux.js';
 import { initCoeff }    from './layers/coeff.js';
 import { initDossiers } from './layers/dossiers.js';
 import { initTarifs }   from './layers/tarifs.js';
+import { initZfu }      from './layers/zfu.js';
 import { initSections }          from './layers/sections.js';
 import { initCfe }               from './layers/cfe.js';
 
@@ -79,6 +80,7 @@ window.afficherSurCarte = function (lat, lon, classif) {
 map.on('load', () => {
     const taux     = initTaux(map);
     const coeff    = initCoeff(map);
+    const zfu      = initZfu(map);
     const dossiers = initDossiers(map);
     const tarifs   = initTarifs(map, catsReady);
     const sections = initSections(map);

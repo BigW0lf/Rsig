@@ -49,8 +49,8 @@ export const PAL = {
 
 // ── Ordre des couches (appelé après chaque rendu) ─────────
 export function bddOnTop(map) {
-    // 1. Taux/tarifs/sections/CFE en bas
-    ['taux-fill','taux-line','tarifs-fill','tarifs-line','sections-fill','cfe-fill','cfe-line'].forEach(id => {
+    // 1. Taux/tarifs/sections/CFE/ZFU en bas
+    ['taux-fill','taux-line','tarifs-fill','tarifs-line','sections-fill','cfe-fill','cfe-line','zfu-fill','zfu-line'].forEach(id => {
         if (map.getLayer(id)) map.moveLayer(id);
     });
     // 2. Coeff polygones (hachures) au-dessus
