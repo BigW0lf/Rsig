@@ -49,7 +49,7 @@ function upsert(map, fc, color) {
         ['tarifs-fill','tarifs-line'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
         if (map.getSource('tarifs-src')) map.removeSource('tarifs-src');
         map.addSource('tarifs-src', { type: 'geojson', data: fc });
-        map.addLayer({ id: 'tarifs-fill', type: 'fill', source: 'tarifs-src', paint: { 'fill-color': color, 'fill-opacity': 0.7 } });
+        map.addLayer({ id: 'tarifs-fill', type: 'fill', source: 'tarifs-src', paint: { 'fill-color': color, 'fill-opacity': 0.5 } });
         map.addLayer({ id: 'tarifs-line', type: 'line', source: 'tarifs-src', paint: { 'line-color': '#444', 'line-width': 0.5 } });
         map.on('mouseenter', 'tarifs-fill', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'tarifs-fill', () => map.getCanvas().style.cursor = '');

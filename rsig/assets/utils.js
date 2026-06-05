@@ -50,19 +50,27 @@ export const PAL = {
 // ── Ordre des couches (appelé après chaque rendu) ─────────
 export function bddOnTop(map) {
     // 1. Taux/tarifs/sections/CFE/ZFU en bas
-    ['taux-fill','taux-line','tarifs-fill','tarifs-line','sections-fill','cfe-fill','cfe-line','zfu-fill','zfu-line'].forEach(id => {
+    ['taux-fill','taux-line','tarifs-fill','tarifs-line','sections-fill','cfe-fill','cfe-line','tf-fill','tf-line','ta-fill','ta-line','tsb-idf-fill','tsb-idf-line','tsb-paca-fill','tsb-paca-line','tass-fill','tass-line','zfu-fill','zfu-line'].forEach(id => {
         if (map.getLayer(id)) map.moveLayer(id);
     });
-    // 2. Coeff polygones (hachures) au-dessus
+    // 2. Coeff polygones (hachures)
     for (let i = 0; i < 10; i++) {
         if (map.getLayer(`coeff-hatch-${i}`)) map.moveLayer(`coeff-hatch-${i}`);
     }
     ['coeff-fill','coeff-line'].forEach(id => { if (map.getLayer(id)) map.moveLayer(id); });
-    // 3. Clusters coeff (points) au-dessus des polygones
+    // 3. Clusters coeff
     ['coeff-cluster-circle','coeff-cluster-cluster','coeff-cluster-count'].forEach(id => {
         if (map.getLayer(id)) map.moveLayer(id);
     });
-    // 4. Dossiers tout en haut
+    // 4. TA majorée (hachures + polygones + clusters) — priorité haute
+    ['ta-maj-fill','ta-maj-line'].forEach(id => { if (map.getLayer(id)) map.moveLayer(id); });
+    for (let i = 0; i < 5; i++) {
+        if (map.getLayer(`ta-maj-hatch-${i}`)) map.moveLayer(`ta-maj-hatch-${i}`);
+    }
+    ['ta-maj-cluster','ta-maj-cluster-count','ta-maj-point'].forEach(id => {
+        if (map.getLayer(id)) map.moveLayer(id);
+    });
+    // 5. Dossiers tout en haut
     ['dossiers-circle','dossiers-cluster','dossiers-cluster-count'].forEach(id => {
         if (map.getLayer(id)) map.moveLayer(id);
     });

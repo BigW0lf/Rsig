@@ -61,7 +61,7 @@ function upsert(map, fc, propKey) {
         }
         map.addSource('sections-src', { type: 'geojson', data: fc });
         map.addLayer({ id: 'sections-fill', type: 'fill', source: 'sections-src',
-            paint: { 'fill-color': color, 'fill-opacity': 0.75, 'fill-outline-color': '#000000' } });
+            paint: { 'fill-color': color, 'fill-opacity': 0.5, 'fill-outline-color': '#000000' } });
         map.on('mouseenter', 'sections-fill', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'sections-fill', () => map.getCanvas().style.cursor = '');
     }

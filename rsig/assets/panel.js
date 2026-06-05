@@ -5,7 +5,7 @@ document.getElementById('close-right').addEventListener('click', () => panelRigh
 const _sections = {};
 
 function _renderPanel() {
-    const keys = ['taux', 'tarifs', 'coeff', 'cfe', 'sections', 'zfu', 'dossiers'];
+    const keys = ['taux', 'tarifs', 'coeff', 'cfe', 'tf', 'ta', 'ta-majore', 'sections', 'tsb', 'tass', 'zfu', 'dossiers'];
     const active = keys.filter(k => _sections[k]);
     if (!active.length) { panelRight.classList.add('hidden'); return; }
     const first = _sections[active[0]];

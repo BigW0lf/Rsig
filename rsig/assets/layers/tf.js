@@ -16,8 +16,8 @@ function bboxParam(map) {
 
 function getOptions() {
     return {
-        cat:   document.getElementById('cfe-categorie')?.value || '',
-        annee: document.getElementById('cfe-annee')?.value     || '2026',
+        cat:   document.getElementById('tf-categorie')?.value || '',
+        annee: document.getElementById('tf-annee')?.value     || '2025',
     };
 }
 
@@ -30,7 +30,7 @@ function fetchLayer(url, onData) {
     fetch(url, { signal: abortCtrl.signal })
         .then(r => r.json())
         .then(d => { hideSpinner(); onData(d); })
-        .catch(e => { hideSpinner(); if (e.name !== 'AbortError') console.error('cfe', e); });
+        .catch(e => { hideSpinner(); if (e.name !== 'AbortError') console.error('tf', e); });
 }
 
 function quantileBreaks(values, n) {
@@ -41,7 +41,6 @@ function quantileBreaks(values, n) {
         const idx = Math.round(i * (sorted.length - 1) / n);
         breaks.push(+sorted[idx].toFixed(4));
     }
-    // dédupliquer les breaks identiques consécutifs
     const unique = [breaks[0]];
     for (let i = 1; i < breaks.length; i++) {
         if (breaks[i] > unique[unique.length - 1]) unique.push(breaks[i]);
@@ -50,119 +49,123 @@ function quantileBreaks(values, n) {
 }
 
 function upsert(map, fc, color) {
-    if (map.getLayer('cfe-fill')) {
-        map.getSource('cfe-src').setData(fc);
-        map.setPaintProperty('cfe-fill', 'fill-color', color);
+    if (map.getLayer('tf-fill')) {
+        map.getSource('tf-src').setData(fc);
+        map.setPaintProperty('tf-fill', 'fill-color', color);
     } else {
-        if (map.getSource('cfe-src')) {
-            ['cfe-fill', 'cfe-line'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
-            map.removeSource('cfe-src');
+        if (map.getSource('tf-src')) {
+            ['tf-fill', 'tf-line'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
+            map.removeSource('tf-src');
         }
-        map.addSource('cfe-src', { type: 'geojson', data: fc });
-        map.addLayer({ id: 'cfe-fill', type: 'fill', source: 'cfe-src',
+        map.addSource('tf-src', { type: 'geojson', data: fc });
+        map.addLayer({ id: 'tf-fill', type: 'fill', source: 'tf-src',
             paint: { 'fill-color': color, 'fill-opacity': 0.45 } });
-        map.addLayer({ id: 'cfe-line', type: 'line', source: 'cfe-src',
+        map.addLayer({ id: 'tf-line', type: 'line', source: 'tf-src',
             paint: { 'line-color': '#444', 'line-width': 0.5 } });
     }
     bddOnTop(map);
 }
 
 function remove(map) {
-    ['cfe-fill', 'cfe-line'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
-    if (map.getSource('cfe-src')) map.removeSource('cfe-src');
+    ['tf-fill', 'tf-line'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
+    if (map.getSource('tf-src')) map.removeSource('tf-src');
 }
 
-export function loadCfe(map) {
+export function loadTf(map) {
     if (!active) return;
     const { cat, annee } = getOptions();
 
-    // Pas de chargement sans catégorie
     if (!cat) {
-        const msg = document.getElementById('cfe-msg');
+        const msg = document.getElementById('tf-msg');
         if (msg) msg.textContent = 'Choisissez une catégorie pour afficher la couche.';
         return;
     }
-    const msg = document.getElementById('cfe-msg');
+    const msg = document.getElementById('tf-msg');
     if (msg) msg.textContent = '';
 
     const zoom  = map.getZoom();
     const level = zoom < DEPT_ZOOM ? 'dept' : 'commune';
-
-    const myId = ++loadId;
+    const myId  = ++loadId;
 
     const render = (fc, renderLevel) => {
         if (myId !== loadId) return;
         if (!fc?.features?.length) {
-            if (map.getSource('cfe-src'))
-                map.getSource('cfe-src').setData({ type: 'FeatureCollection', features: [] });
+            if (map.getSource('tf-src'))
+                map.getSource('tf-src').setData({ type: 'FeatureCollection', features: [] });
             return;
         }
-        const values = fc.features.map(f => +f.properties.cfe_estime);
+        const values = fc.features.map(f => +f.properties.tf_estime);
         const breaks = quantileBreaks(values, 6);
         if (!breaks) return;
-        upsert(map, fc, stepExpr('cfe_estime', breaks, PAL.cfe));
+        upsert(map, fc, stepExpr('tf_estime', breaks, PAL.cfe));
         const niveauLabel = renderLevel === 'dept' ? 'moy. par département' : 'communes';
-        saveLegend('cfe', `CFE €/m² — ${cat} ${annee} (${niveauLabel})`, breaks, PAL.cfe, ' €/m²');
+        saveLegend('tf', `TF €/m² — ${cat} ${annee} (${niveauLabel})`, breaks, PAL.cfe, ' €/m²');
     };
 
     const params = `categorie=${cat}&annee=${annee}`;
     if (level === 'dept') {
         const key = cacheKey(cat, annee);
         if (deptCache[key]) { render(deptCache[key], 'dept'); return; }
-        fetchLayer(`/api/cfe/departements?${params}`, fc => {
+        fetchLayer(`/api/tf/departements?${params}`, fc => {
             deptCache[key] = fc;
             render(fc, 'dept');
         });
     } else {
-        fetchLayer(`/api/cfe?bbox=${bboxParam(map)}&${params}`, fc => render(fc, 'commune'));
+        fetchLayer(`/api/tf?bbox=${bboxParam(map)}&${params}`, fc => render(fc, 'commune'));
     }
 }
 
-export function initCfe(map) {
-    const toggle  = document.getElementById('toggle-cfe');
-    const options = document.getElementById('cfe-options');
-    const catSel  = document.getElementById('cfe-categorie');
-    const anneSel = document.getElementById('cfe-annee');
+export function initTf(map) {
+    const toggle  = document.getElementById('toggle-tf');
+    const options = document.getElementById('tf-options');
+    const catSel  = document.getElementById('tf-categorie');
+    const anneSel = document.getElementById('tf-annee');
 
     function onOptionChange() {
         Object.keys(deptCache).forEach(k => delete deptCache[k]);
-        if (active) loadCfe(map);
+        if (active) loadTf(map);
     }
 
     toggle.addEventListener('change', () => {
         active = toggle.checked;
         options.classList.toggle('hidden', !active);
-        if (!active) { remove(map); dropLegend('cfe'); clearInfo('cfe'); }
-        else loadCfe(map);
+        if (!active) { remove(map); dropLegend('tf'); clearInfo('tf'); }
+        else loadTf(map);
     });
 
     if (catSel)  catSel.addEventListener('change',  onOptionChange);
     if (anneSel) anneSel.addEventListener('change', onOptionChange);
 
-    map.on('mouseenter', 'cfe-fill', () => map.getCanvas().style.cursor = 'pointer');
-    map.on('mouseleave', 'cfe-fill', () => map.getCanvas().style.cursor = '');
+    map.on('mouseenter', 'tf-fill', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'tf-fill', () => map.getCanvas().style.cursor = '');
 
-    map.on('click', 'cfe-fill', e => {
-        const p   = e.features[0].properties;
+    map.on('click', 'tf-fill', e => {
+        const p    = e.features[0].properties;
         const fmtv = (v, suf) => v != null ? (+v).toFixed(4) + suf : '–';
         const fmtp = v => v != null ? (+v).toFixed(3) + ' %' : '–';
         const { cat } = getOptions();
 
         if (p.nom_dep) {
-            showInfo('cfe', `${p.nom_dep} (${p.code_dep})`,
-                irow(`CFE estimée/m² (${cat})`, fmtv(p.cfe_estime, ' €/m²')) +
+            showInfo('tf', `${p.nom_dep} (${p.code_dep})`,
+                irow(`TF estimée/m² (${cat})`, fmtv(p.tf_estime, ' €/m²')) +
                 irow('Tarif moyen section', fmtv(p.tarif_moyen, ' €/m²')) +
                 `<div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 9 pour le détail par commune</div>`
             );
         } else {
-            showInfo('cfe', `${p.libcom} (${p.code_insee})`,
-                irow(`CFE estimée/m² (${cat})`, fmtv(p.cfe_estime, ' €/m²')) +
+            const taux = +p.taux_tf_total;
+            showInfo('tf', `${p.libcom} (${p.code_insee})`,
+                irow(`TF estimée/m² (${cat})`, fmtv(p.tf_estime, ' €/m²')) +
+                irow('Indicateur TF/m²', fmtv(p.indicateur_tf_m2, '')) +
                 irow('Tarif section', fmtv(p.tarif_section, ' €/m²')) +
-                irow('Taux CFE total', fmtp(p.taux_cfe_total)) +
-                irow('Coeff. neutralisation', p.coeff_neut_com ?? '–')
+                irow('Taux TF total', fmtp(taux)) +
+                irow('dont Commune', fmtp(p.taux_com)) +
+                irow('dont EPCI', fmtp(p.taux_epci)) +
+                irow('dont TSE', fmtp(p.taux_tse)) +
+                irow('dont TEOM', fmtp(p.taux_teom)) +
+                irow('Millésime taux', p.millesime)
             );
         }
     });
 
-    return { load: () => loadCfe(map), isActive: () => active };
+    return { load: () => loadTf(map), isActive: () => active };
 }

@@ -56,7 +56,7 @@ function upsert(map, fc, color) {
         ['taux-fill','taux-line'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
         if (map.getSource('taux-src')) map.removeSource('taux-src');
         map.addSource('taux-src', { type: 'geojson', data: fc });
-        map.addLayer({ id: 'taux-fill', type: 'fill', source: 'taux-src', paint: { 'fill-color': color, 'fill-opacity': 0.7 } });
+        map.addLayer({ id: 'taux-fill', type: 'fill', source: 'taux-src', paint: { 'fill-color': color, 'fill-opacity': 0.5 } });
         map.addLayer({ id: 'taux-line', type: 'line', source: 'taux-src', paint: { 'line-color': '#334', 'line-width': 0.5 } });
         map.on('mouseenter', 'taux-fill', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'taux-fill', () => map.getCanvas().style.cursor = '');

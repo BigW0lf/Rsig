@@ -29,5 +29,7 @@ Flight::route('GET /donnees', function () { requireAuth();
     Flight::render('donnees', compact('db', 'tables', 'table', 'cols', 'rows') + ['connected' => $db !== null]);
 });
 
-Flight::route('GET /maj-bdd', function () { requireAuth(); Flight::render('maj_bdd_archive', ['connected' => getDb() !== null]); });
+Flight::route('GET /maj-bdd',  function () { requireAuth(); Flight::render('maj_bdd_archive', ['connected' => getDb() !== null]); });
 Flight::route('GET /requetes', function () { requireAuth(); Flight::render('requetes', ['connected' => getDb() !== null]); });
+Flight::route('GET /bofip',    function () { requireAuth(); Flight::render('bofip'); });
+Flight::route('GET /maj',      function () { requireAuth(); Flight::render('maj'); });

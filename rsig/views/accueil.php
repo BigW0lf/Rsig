@@ -26,7 +26,8 @@
     </span>
     <a href="#" class="active" data-page="carte">Carte</a>
     <a href="#" data-page="requetes">Requêtes</a>
-    <a href="#" data-page="crm">CRM</a>
+    <a href="#" data-page="bofip">BOFIP</a>
+    <a href="#" data-page="maj">Mise à jour</a>
     <a href="#" data-page="donnees" style="margin-left:auto">Données</a>
     <span class="nav-user"><?= htmlspecialchars($_SESSION['user_name'] ?? '') ?></span>
     <a href="/auth/logout" class="nav-logout" title="Déconnexion">&#x2715;</a>
@@ -37,6 +38,8 @@
     <iframe id="iframe-donnees"  src="" style="width:100%;height:100%;border:none;display:none"></iframe>
     <iframe id="iframe-requetes" src="" style="width:100%;height:100%;border:none;display:none"></iframe>
     <iframe id="iframe-crm"      src="" style="width:100%;height:100%;border:none;display:none"></iframe>
+    <iframe id="iframe-bofip"    src="" style="width:100%;height:100%;border:none;display:none"></iframe>
+    <iframe id="iframe-maj"      src="" style="width:100%;height:100%;border:none;display:none"></iframe>
 </div>
 
 <div id="app">
@@ -146,6 +149,124 @@
                     </select>
                 </label>
                 <div id="cfe-msg" class="layer-msg"></div>
+            </div>
+        </div>
+
+        <!-- TF estimée €/m² -->
+        <div class="layer-row">
+            <label class="layer-toggle">
+                <input type="checkbox" id="toggle-tf">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+                TF estimée €/m²
+            </label>
+            <div id="tf-options" class="layer-sub hidden">
+                <label>Catégorie
+                    <select id="tf-categorie">
+                        <option value="">— choisir —</option>
+                    </select>
+                </label>
+                <label>Année
+                    <select id="tf-annee">
+                        <option value="2025" selected>2025</option>
+                        <option value="2024">2024</option>
+                        <option value="2023">2023</option>
+                        <option value="2022">2022</option>
+                        <option value="2021">2021</option>
+                        <option value="2020">2020</option>
+                        <option value="2019">2019</option>
+                        <option value="2017">2017</option>
+                    </select>
+                </label>
+                <div id="tf-msg" class="layer-msg"></div>
+            </div>
+        </div>
+
+        <!-- Taxe d'Aménagement -->
+        <div class="layer-row">
+            <label class="layer-toggle">
+                <input type="checkbox" id="toggle-ta">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                Taxe d'aménagement
+            </label>
+            <div id="ta-options" class="layer-sub hidden">
+                <label>Mode
+                    <select id="ta-mode">
+                        <option value="union">Avec zones majorées</option>
+                        <option value="commune">Communes seulement</option>
+                    </select>
+                </label>
+                <label>Afficher
+                    <select id="ta-champ">
+                        <option value="ta_estime_log">TA estim. logement €/m²</option>
+                        <option value="ta_estime_aut">TA estim. autres constr. €/m²</option>
+                        <option value="taux_total">Taux total (%)</option>
+                        <option value="taux_com">Taux communal (%)</option>
+                    </select>
+                </label>
+                <label>Val. forfaitaires année
+                    <select id="ta-annee">
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                        <option value="2023">2023</option>
+                        <option value="2022">2022</option>
+                    </select>
+                </label>
+            </div>
+        </div>
+
+        <!-- TA taux majorés (sections + clusters) -->
+        <div class="layer-row">
+            <label class="layer-toggle">
+                <input type="checkbox" id="toggle-ta-majore">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                TA majorée &gt;5%
+            </label>
+            <div id="ta-majore-options" class="layer-sub hidden">
+                <label>Millésime
+                    <select id="ta-majore-millesime"></select>
+                </label>
+            </div>
+        </div>
+
+        <!-- TSB IDF -->
+        <div class="layer-row">
+            <label class="layer-toggle">
+                <input type="checkbox" id="toggle-tsb-idf">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                TSB — Circ. IDF
+            </label>
+            <div id="tsb-idf-options" class="layer-sub hidden">
+                <label>Millésime
+                    <select id="tsb-idf-millesime"></select>
+                </label>
+            </div>
+        </div>
+
+        <!-- TSB PACA -->
+        <div class="layer-row">
+            <label class="layer-toggle">
+                <input type="checkbox" id="toggle-tsb-paca">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                TSB — PACA
+            </label>
+            <div id="tsb-paca-options" class="layer-sub hidden">
+                <label>Millésime
+                    <select id="tsb-paca-millesime"></select>
+                </label>
+            </div>
+        </div>
+
+        <!-- TASS IDF -->
+        <div class="layer-row">
+            <label class="layer-toggle">
+                <input type="checkbox" id="toggle-tass">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/></svg>
+                TASS — Stationnement IDF
+            </label>
+            <div id="tass-options" class="layer-sub hidden">
+                <label>Millésime
+                    <select id="tass-millesime"></select>
+                </label>
             </div>
         </div>
 
@@ -263,7 +384,7 @@ document.addEventListener('click', e => {
 });
 
 // ── Navigation SPA ───────────────────────────────────────
-const PAGES   = { donnees: '/donnees', requetes: '/requetes', crm: '/crm' };
+const PAGES   = { donnees: '/donnees', requetes: '/requetes', crm: '/crm', bofip: '/bofip', maj: '/maj' };
 const overlay = document.getElementById('page-overlay');
 
 function showPage(page) {
@@ -297,7 +418,7 @@ document.querySelectorAll('nav a[data-page]').forEach(a => {
 });
 window.addEventListener('popstate', e => showPage(e.state?.page || 'carte'));
 window.addEventListener('load', () => {
-    const pathToPage = { '/donnees': 'donnees', '/requetes': 'requetes', '/crm': 'crm' };
+    const pathToPage = { '/donnees': 'donnees', '/requetes': 'requetes', '/crm': 'crm', '/bofip': 'bofip', '/maj': 'maj' };
     const initPage = pathToPage[location.pathname] || 'carte';
     if (initPage !== 'carte') showPage(initPage);
     else history.replaceState({ page: 'carte' }, '', location.pathname);

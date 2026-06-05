@@ -15,7 +15,7 @@ export function dropLegend(key) {
 }
 
 function _render() {
-    const keys = ['taux', 'sections', 'coeff', 'cfe', 'tarifs', 'zfu', 'dossiers'].filter(k => state[k]);
+    const keys = ['taux', 'sections', 'coeff', 'cfe', 'tf', 'ta', 'ta-majore', 'tarifs', 'tsb-IDF', 'tsb-PACA', 'tass', 'zfu', 'dossiers'].filter(k => state[k]);
     if (!keys.length) { legendEl.classList.add('hidden'); return; }
     legendItems.innerHTML = keys.map(k => {
         const { title, breaks, pal, suffix } = state[k];

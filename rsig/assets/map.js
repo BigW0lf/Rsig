@@ -5,8 +5,13 @@ import { initCoeff }    from './layers/coeff.js';
 import { initDossiers } from './layers/dossiers.js';
 import { initTarifs }   from './layers/tarifs.js';
 import { initZfu }      from './layers/zfu.js';
+import { initTsb }      from './layers/tsb.js';
+import { initTass }     from './layers/tass.js';
+import { initTa }       from './layers/ta.js';
+import { initTaMajore } from './layers/ta_majore.js';
 import { initSections }          from './layers/sections.js';
 import { initCfe }               from './layers/cfe.js';
+import { initTf }                from './layers/tf.js';
 
 // Pré-charge les catégories tarifs avant que la carte soit prête
 const catsReady = fetch('/api/tarifs/categories').then(r => r.json()).catch(() => []);
@@ -81,21 +86,28 @@ map.on('load', () => {
     const taux     = initTaux(map);
     const coeff    = initCoeff(map);
     const zfu      = initZfu(map);
+    const tsb      = initTsb(map);
+    const tass     = initTass(map);
+    const ta       = initTa(map);
+    const taMajore = initTaMajore(map);
     const dossiers = initDossiers(map);
     const tarifs   = initTarifs(map, catsReady);
     const sections = initSections(map);
     const cfe      = initCfe(map);
+    const tf       = initTf(map);
 
-    // Peupler le select catégorie CFE (même liste que tarifs)
+    // Peupler le select catégorie CFE et TF (même liste) (même liste que tarifs)
     catsReady.then(cats => {
-        const sel = document.getElementById('cfe-categorie');
-        if (sel && cats.length) {
-            cats.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c; opt.textContent = c;
-                sel.appendChild(opt);
-            });
-        }
+        ['cfe-categorie', 'tf-categorie'].forEach(id => {
+            const sel = document.getElementById(id);
+            if (sel && cats.length) {
+                cats.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c; opt.textContent = c;
+                    sel.appendChild(opt);
+                });
+            }
+        });
     });
 
     map.on('moveend', debounce(() => {
@@ -105,6 +117,7 @@ map.on('load', () => {
         if (tarifs.isActive())   tarifs.load();
         if (sections.isActive()) sections.load();
         if (cfe.isActive())      cfe.load();
+        if (tf.isActive())       tf.load();
     }, 400));
 
     updateWfs(map);

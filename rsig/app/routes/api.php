@@ -441,12 +441,42 @@ Flight::route('GET /api/cfe', function () {
     if (!$cat || !preg_match('/^[A-Z]{3}[0-9]$/', $cat)) { Flight::json(['error' => 'categorie requise'], 400); return; }
     $annee = validateAnnee(Flight::request()->query['annee'] ?? '');
     $col   = "val_$annee";
-    $sql = "SELECT v.code_insee, v.libcom, v.millesime,
-                   v.taux_cfe_total, v.coeff_neut_com, v.indicateur_cfe_m2,
-                   ROUND((v.indicateur_cfe_m2 * t_avg.tarif)::numeric,4) AS cfe_estime,
-                   ROUND(t_avg.tarif::numeric,2) AS tarif_section,
-                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(v.geom,0.0002),4)::text AS geojson
-            FROM cfe_calcul v
+    $sql = "SELECT DISTINCT ON (s.code_insee, s.section)
+                   s.code_insee, s.section, s.secteur, s.nom_com AS libcom,
+                   v.millesime, v.taux_cfe_total, v.coeff_neut_com, v.indicateur_cfe_m2,
+                   ROUND((v.indicateur_cfe_m2 * t.$col::numeric)::numeric,4) AS cfe_estime,
+                   ROUND(t.$col::numeric,2) AS tarif_section,
+                   ST_AsGeoJSON(ST_Transform(ST_SimplifyPreserveTopology(s.geom,2),4326),4)::text AS geojson
+            FROM sections_2025 s
+            JOIN tarifs_pivot t
+              ON t.dep = CASE WHEN s.code_dep='97' THEN left(s.code_insee,3) ELSE s.code_dep END
+             AND t.num_secteur = s.secteur AND t.categorie = :cat
+            JOIN cfe_calcul v ON v.code_insee = s.code_insee
+            WHERE ST_Intersects(s.geom, ST_Transform(ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326),2154))
+              AND t.$col IS NOT NULL
+              AND v.indicateur_cfe_m2 IS NOT NULL
+            LIMIT 2000";
+    $stmt = $db->prepare($sql);
+    $stmt->bindValue(':cat', $cat);
+    $stmt->bindValue(':x1',$b[0]); $stmt->bindValue(':y1',$b[1]);
+    $stmt->bindValue(':x2',$b[2]); $stmt->bindValue(':y2',$b[3]);
+    $stmt->execute();
+    Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
+});
+
+// ── TF estimée €/m² ──────────────────────────────────────
+Flight::route('GET /api/tf/departements', function () {
+    $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $cat = Flight::request()->query['categorie'] ?? '';
+    if (!$cat || !preg_match('/^[A-Z]{3}[0-9]$/', $cat)) { Flight::json(['error' => 'categorie requise'], 400); return; }
+    $annee = validateAnnee(Flight::request()->query['annee'] ?? '');
+    $col   = "val_$annee";
+    $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
+                   ROUND(AVG(v.indicateur_tf_m2 * t_avg.tarif)::numeric,4) AS tf_estime,
+                   ROUND(AVG(t_avg.tarif)::numeric,2) AS tarif_moyen,
+                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(d.geom,0.01),4)::text AS geojson
+            FROM departements_geom_4326 d
+            JOIN tf_calcul v ON LEFT(v.code_insee,2) = d.code_insee AND v.millesime = :annee
             JOIN (
                 SELECT left(s.code_insee,5) AS code_insee, AVG(t.$col::numeric) AS tarif
                 FROM sections_2025 s
@@ -456,13 +486,837 @@ Flight::route('GET /api/cfe', function () {
                 WHERE t.$col IS NOT NULL
                 GROUP BY left(s.code_insee,5)
             ) t_avg ON v.code_insee = t_avg.code_insee
-            WHERE ST_Intersects(v.geom, ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326))
-              AND v.indicateur_cfe_m2 IS NOT NULL
+            WHERE v.indicateur_tf_m2 IS NOT NULL AND v.indicateur_tf_m2 > 0
+            GROUP BY d.code_insee, d.nom_officiel, d.geom";
+    $stmt = $db->prepare($sql);
+    $stmt->bindValue(':cat', $cat);
+    $stmt->bindValue(':annee', (int)$annee, PDO::PARAM_INT);
+    $stmt->execute();
+    Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
+});
+
+Flight::route('GET /api/tf', function () {
+    $b = parseBbox();
+    if (!$b) { Flight::json(['error' => 'bbox requis'], 400); return; }
+    $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $cat = Flight::request()->query['categorie'] ?? '';
+    if (!$cat || !preg_match('/^[A-Z]{3}[0-9]$/', $cat)) { Flight::json(['error' => 'categorie requise'], 400); return; }
+    $annee = validateAnnee(Flight::request()->query['annee'] ?? '');
+    $col   = "val_$annee";
+    $sql = "SELECT DISTINCT ON (s.code_insee, s.section)
+                   s.code_insee, s.section, s.secteur, s.nom_com AS libcom,
+                   v.millesime, v.taux_tf_total, v.taux_com, v.taux_synd, v.taux_epci,
+                   v.taux_tse, v.taux_gemapi, v.taux_tasa, v.taux_teom,
+                   v.indicateur_tf_m2,
+                   ROUND((v.indicateur_tf_m2 * t.$col::numeric)::numeric,4) AS tf_estime,
+                   ROUND(t.$col::numeric,2) AS tarif_section,
+                   ST_AsGeoJSON(ST_Transform(ST_SimplifyPreserveTopology(s.geom,2),4326),4)::text AS geojson
+            FROM sections_2025 s
+            JOIN tarifs_pivot t
+              ON t.dep = CASE WHEN s.code_dep='97' THEN left(s.code_insee,3) ELSE s.code_dep END
+             AND t.num_secteur = s.secteur AND t.categorie = :cat
+            JOIN tf_calcul v ON v.code_insee = s.code_insee AND v.millesime = :annee
+            WHERE ST_Intersects(s.geom, ST_Transform(ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326),2154))
+              AND t.$col IS NOT NULL
+              AND v.indicateur_tf_m2 IS NOT NULL AND v.indicateur_tf_m2 > 0
             LIMIT 2000";
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':cat', $cat);
+    $stmt->bindValue(':annee', (int)$annee, PDO::PARAM_INT);
     $stmt->bindValue(':x1',$b[0]); $stmt->bindValue(':y1',$b[1]);
     $stmt->bindValue(':x2',$b[2]); $stmt->bindValue(':y2',$b[3]);
+    $stmt->execute();
+    Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
+});
+
+// ── TSB — Circonscriptions IDF + PACA ────────────────────
+// ── Taxe d'Aménagement — mise à jour ─────────────────────
+Flight::route('GET /api/ta/update/status', function () {
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $row    = $db->query("SELECT * FROM ta_update_log ORDER BY id DESC LIMIT 1")->fetch();
+    $counts = $db->query("SELECT COUNT(*) FROM ta_taux")->fetchColumn();
+    $deps   = $db->query("SELECT COUNT(*) FROM ta_taux WHERE taux_dep IS NOT NULL")->fetchColumn();
+    $reg    = $db->query("SELECT COUNT(*) FROM ta_taux WHERE taux_reg IS NOT NULL")->fetchColumn();
+    $last   = $db->query("SELECT MAX(date_effet) FROM ta_taux")->fetchColumn();
+    Flight::json([
+        'last_run'    => $row ?: null,
+        'communes'    => (int)$counts,
+        'avec_dep'    => (int)$deps,
+        'avec_reg'    => (int)$reg,
+        'date_effet_max' => $last,
+    ]);
+});
+
+Flight::route('POST /api/ta/update', function () {
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+
+    $running = $db->query("SELECT id FROM ta_update_log WHERE status='running' AND started_at > now() - interval '15 minutes'")->fetchColumn();
+    if ($running) { Flight::json(['status' => 'already_running', 'log_id' => $running]); return; }
+
+    $logStmt = $db->prepare("INSERT INTO ta_update_log (started_at, status, message) VALUES (now(),'running','') RETURNING id");
+    $logStmt->execute();
+    $logId = (int)$logStmt->fetchColumn();
+
+    $python = PYTHON_PATH;
+    $script = SCRIPTS_PATH . '/update_ta.py';
+    $log    = SCRIPTS_PATH . '/update_ta_' . $logId . '.log';
+
+    if (PHP_OS_FAMILY === 'Windows') {
+        $cmd = '"' . $python . '" "' . $script . '" >"' . $log . '" 2>&1';
+        pclose(popen('start "" /B cmd /c "' . $cmd . '"', 'r'));
+    } else {
+        $cmd = escapeshellarg($python) . ' ' . escapeshellarg($script) . ' >' . escapeshellarg($log) . ' 2>&1 &';
+        shell_exec($cmd);
+    }
+
+    // Worker PHP qui surveille la fin du process et met à jour le log
+    $phpWorker = realpath(__DIR__ . '/../ta_worker.php');
+    $phpCmd = '"' . PHP_CLI_PATH . '"' . ' "' . $phpWorker . '" ' . $logId . ' "' . addslashes($log) . '"';
+    if (PHP_OS_FAMILY === 'Windows') {
+        pclose(popen('start "" /B ' . $phpCmd . ' >NUL 2>&1', 'r'));
+    } else {
+        shell_exec(escapeshellarg(PHP_CLI_PATH) . ' ' . escapeshellarg($phpWorker) . ' ' . $logId . ' ' . escapeshellarg($log) . ' >/dev/null 2>&1 &');
+    }
+
+    Flight::json(['status' => 'started', 'log_id' => $logId]);
+});
+
+// ── Taxe d'Aménagement ───────────────────────────────────
+Flight::route('GET /api/ta/exo', function () {
+    $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $dep = trim(Flight::request()->query['dep']  ?? '');
+    $com = trim(Flight::request()->query['com']  ?? '');
+    $exoOnly = (Flight::request()->query['exo_only'] ?? '1') === '1';
+
+    $where = ['1=1'];
+    $params = [];
+    if ($dep) { $where[] = 'dep = :dep'; $params[':dep'] = str_pad($dep, 2, '0', STR_PAD_LEFT); }
+    if ($com) { $where[] = 'UPPER(libcom) LIKE :com'; $params[':com'] = '%' . strtoupper($com) . '%'; }
+    if ($exoOnly) {
+        $where[] = "(exo_habitation IS NOT NULL OR exo_industriel IS NOT NULL OR exo_commerce IS NOT NULL
+                     OR exo_immeubles_classes IS NOT NULL OR exo_abris_jardin IS NOT NULL
+                     OR exo_maisons_sante IS NOT NULL OR exo_terrains_rehab IS NOT NULL
+                     OR exo_transf_habitation IS NOT NULL OR exo_pret_ptx IS NOT NULL
+                     OR val_forfait_station IS NOT NULL)";
+    }
+
+    $sql = "SELECT code_insee, libcom, dep, taux_com, taux_dep, taux_reg,
+                   ROUND(COALESCE(taux_com,0)+COALESCE(taux_dep,0)+COALESCE(taux_reg,0),3) AS taux_total,
+                   date_effet, val_forfait_station,
+                   exo_habitation, exo_pret_ptx, exo_industriel, exo_commerce,
+                   exo_immeubles_classes, exo_abris_jardin, exo_maisons_sante,
+                   exo_terrains_rehab, exo_transf_habitation
+            FROM ta_taux
+            WHERE " . implode(' AND ', $where) . "
+            ORDER BY dep, libcom
+            LIMIT 500";
+    $stmt = $db->prepare($sql);
+    foreach ($params as $k => $v) $stmt->bindValue($k, $v);
+    $stmt->execute();
+    Flight::json($stmt->fetchAll());
+});
+
+Flight::route('GET /api/ta/stats', function () {
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    // Quintiles précalculés sur l'ensemble des communes (toutes années confondues)
+    $row = $db->query("
+        SELECT
+            ROUND(PERCENTILE_CONT(0.0)  WITHIN GROUP (ORDER BY COALESCE(taux_com,0)+COALESCE(taux_dep,0)+COALESCE(taux_reg,0))::numeric,2) AS t0,
+            ROUND(PERCENTILE_CONT(0.2)  WITHIN GROUP (ORDER BY COALESCE(taux_com,0)+COALESCE(taux_dep,0)+COALESCE(taux_reg,0))::numeric,2) AS t20,
+            ROUND(PERCENTILE_CONT(0.4)  WITHIN GROUP (ORDER BY COALESCE(taux_com,0)+COALESCE(taux_dep,0)+COALESCE(taux_reg,0))::numeric,2) AS t40,
+            ROUND(PERCENTILE_CONT(0.6)  WITHIN GROUP (ORDER BY COALESCE(taux_com,0)+COALESCE(taux_dep,0)+COALESCE(taux_reg,0))::numeric,2) AS t60,
+            ROUND(PERCENTILE_CONT(0.8)  WITHIN GROUP (ORDER BY COALESCE(taux_com,0)+COALESCE(taux_dep,0)+COALESCE(taux_reg,0))::numeric,2) AS t80,
+            ROUND(PERCENTILE_CONT(1.0)  WITHIN GROUP (ORDER BY COALESCE(taux_com,0)+COALESCE(taux_dep,0)+COALESCE(taux_reg,0))::numeric,2) AS t100,
+            -- Estimations €/m² logement (IDF : forfait 900, FRANCE : 886 pour 2025)
+            ROUND(PERCENTILE_CONT(0.0)  WITHIN GROUP (ORDER BY CASE WHEN dep IN ('75','77','78','91','92','93','94','95') THEN 900 ELSE 886 END * (COALESCE(taux_com,0)+COALESCE(taux_dep,0)+COALESCE(taux_reg,0))/100)::numeric,2) AS e0,
+            ROUND(PERCENTILE_CONT(0.2)  WITHIN GROUP (ORDER BY CASE WHEN dep IN ('75','77','78','91','92','93','94','95') THEN 900 ELSE 886 END * (COALESCE(taux_com,0)+COALESCE(taux_dep,0)+COALESCE(taux_reg,0))/100)::numeric,2) AS e20,
+            ROUND(PERCENTILE_CONT(0.4)  WITHIN GROUP (ORDER BY CASE WHEN dep IN ('75','77','78','91','92','93','94','95') THEN 900 ELSE 886 END * (COALESCE(taux_com,0)+COALESCE(taux_dep,0)+COALESCE(taux_reg,0))/100)::numeric,2) AS e40,
+            ROUND(PERCENTILE_CONT(0.6)  WITHIN GROUP (ORDER BY CASE WHEN dep IN ('75','77','78','91','92','93','94','95') THEN 900 ELSE 886 END * (COALESCE(taux_com,0)+COALESCE(taux_dep,0)+COALESCE(taux_reg,0))/100)::numeric,2) AS e60,
+            ROUND(PERCENTILE_CONT(0.8)  WITHIN GROUP (ORDER BY CASE WHEN dep IN ('75','77','78','91','92','93','94','95') THEN 900 ELSE 886 END * (COALESCE(taux_com,0)+COALESCE(taux_dep,0)+COALESCE(taux_reg,0))/100)::numeric,2) AS e80,
+            ROUND(PERCENTILE_CONT(1.0)  WITHIN GROUP (ORDER BY CASE WHEN dep IN ('75','77','78','91','92','93','94','95') THEN 900 ELSE 886 END * (COALESCE(taux_com,0)+COALESCE(taux_dep,0)+COALESCE(taux_reg,0))/100)::numeric,2) AS e100
+        FROM ta_taux WHERE taux_com > 0
+    ")->fetch();
+    Flight::json([
+        'taux_total' => [(float)$row['t0'],(float)$row['t20'],(float)$row['t40'],(float)$row['t60'],(float)$row['t80'],(float)$row['t100']],
+        'estime'     => [(float)$row['e0'],(float)$row['e20'],(float)$row['e40'],(float)$row['e60'],(float)$row['e80'],(float)$row['e100']],
+    ]);
+});
+
+Flight::route('GET /api/ta/forfaitaires', function () {
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $annee = (int)(Flight::request()->query['annee'] ?? 0);
+    if (!$annee) $annee = (int)$db->query("SELECT MAX(annee) FROM ta_forfaitaires")->fetchColumn();
+    $stmt = $db->prepare("SELECT annee, zone, type_local, valeur FROM ta_forfaitaires WHERE annee=:a ORDER BY zone, type_local");
+    $stmt->bindValue(':a', $annee, PDO::PARAM_INT);
+    $stmt->execute();
+    Flight::json(['annee' => $annee, 'forfaitaires' => $stmt->fetchAll()]);
+});
+
+// ── TA union spatiale : commune découpée par zones majorées ─
+Flight::route('GET /api/ta/union', function () {
+    $b = parseBbox();
+    if (!$b) { Flight::json(['error' => 'bbox requis'], 400); return; }
+    $db    = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $annee = (int)(Flight::request()->query['annee'] ?? 0);
+    $milM  = (int)(Flight::request()->query['millesime'] ?? 0);
+    if (!$annee) $annee = (int)$db->query("SELECT MAX(annee) FROM ta_forfaitaires")->fetchColumn();
+    if (!$milM)  $milM  = 2026;   // millésime zones majorées
+
+    $DEPS_IDF = ['75','77','78','91','92','93','94','95'];
+    $forf = $db->prepare("SELECT zone, type_local, valeur FROM ta_forfaitaires WHERE annee=:a");
+    $forf->bindValue(':a', $annee, PDO::PARAM_INT);
+    $forf->execute();
+    $forfMap = [];
+    foreach ($forf->fetchAll() as $f) $forfMap[$f['zone']][$f['type_local']] = (float)$f['valeur'];
+
+    // CTE : zones majorées dédupliquées par section (le plus récent millesime <= $milM)
+    // + zones majorées par parcelle (si disponibles)
+    $sql = "
+    WITH bbox_geom AS (
+        SELECT ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326) AS b
+    ),
+    -- Sections majorées (dédupliquées)
+    maj_sect AS (
+        SELECT DISTINCT ON (code_insee, section)
+            code_insee, section, NULL::text AS parcelle,
+            taux, date_effet, millesime,
+            ST_MakeValid(geom) AS geom
+        FROM ta_majore_sections
+        WHERE millesime <= :mil AND ST_Intersects(geom,(SELECT b FROM bbox_geom))
+        ORDER BY code_insee, section, millesime DESC, taux DESC
+    ),
+    -- Parcelles majorées (dédupliquées, si table peuplée)
+    maj_parc AS (
+        SELECT DISTINCT ON (code_insee, section, parcelle)
+            code_insee, section, parcelle,
+            taux, date_effet, millesime,
+            ST_MakeValid(geom) AS geom
+        FROM ta_majore_parcelles
+        WHERE millesime <= :mil AND ST_Intersects(geom,(SELECT b FROM bbox_geom))
+        ORDER BY code_insee, section, parcelle, millesime DESC, taux DESC
+    ),
+    -- Toutes les zones majorées : parcelles en priorité, sections si pas de parcelle
+    maj_all AS (
+        SELECT code_insee, section, parcelle, taux, date_effet, millesime, geom FROM maj_parc
+        UNION ALL
+        SELECT s.code_insee, s.section, NULL, s.taux, s.date_effet, s.millesime, s.geom
+        FROM maj_sect s
+        WHERE NOT EXISTS (
+            SELECT 1 FROM maj_parc p WHERE p.code_insee=s.code_insee AND p.section=s.section
+        )
+    ),
+    -- Union des zones majorées par commune
+    maj_union AS (
+        SELECT code_insee,
+               ST_Union(geom) AS geom_maj
+        FROM maj_all
+        GROUP BY code_insee
+    ),
+    -- Communes dans la bbox avec taux
+    communes_bbox AS (
+        SELECT t.code_insee, t.libcom, t.dep, t.taux_com, t.taux_dep, t.taux_reg,
+               ROUND(COALESCE(t.taux_com,0)+COALESCE(t.taux_dep,0)+COALESCE(t.taux_reg,0),3) AS taux_total,
+               CASE WHEN ST_SRID(c.geom)=4326 THEN ST_MakeValid(c.geom)
+                    ELSE ST_MakeValid(ST_Transform(c.geom,4326)) END AS geom
+        FROM ta_taux t
+        JOIN communes_geom c ON c.insee=t.code_insee
+        WHERE ST_Intersects(
+            CASE WHEN ST_SRID(c.geom)=4326 THEN c.geom ELSE ST_Transform(c.geom,4326) END,
+            (SELECT b FROM bbox_geom))
+    )
+    -- OUTPUT : zones non majorées (reste commune)
+    SELECT cb.code_insee, cb.libcom, cb.dep,
+           cb.taux_com AS taux_zone, cb.taux_dep, cb.taux_reg, cb.taux_total,
+           'commune' AS type_zone, NULL AS section, NULL AS parcelle,
+           ST_AsGeoJSON(ST_SimplifyPreserveTopology(
+               CASE WHEN mu.geom_maj IS NOT NULL
+                    THEN ST_Difference(cb.geom, mu.geom_maj)
+                    ELSE cb.geom END, 0.0001),4)::text AS geojson
+    FROM communes_bbox cb
+    LEFT JOIN maj_union mu ON mu.code_insee = cb.code_insee
+    WHERE cb.taux_total > 0
+
+    UNION ALL
+
+    -- Zones majorées individuelles
+    SELECT ma.code_insee,
+           cb.libcom, cb.dep,
+           ma.taux AS taux_zone, cb.taux_dep, cb.taux_reg,
+           ROUND(ma.taux + COALESCE(cb.taux_dep,0) + COALESCE(cb.taux_reg,0), 3) AS taux_total,
+           CASE WHEN ma.parcelle IS NOT NULL THEN 'parcelle' ELSE 'section' END AS type_zone,
+           ma.section, ma.parcelle,
+           ST_AsGeoJSON(ST_SimplifyPreserveTopology(ma.geom,0.0001),4)::text AS geojson
+    FROM maj_all ma
+    JOIN communes_bbox cb ON cb.code_insee = ma.code_insee
+    ";
+
+    $stmt = $db->prepare($sql);
+    $stmt->bindValue(':x1',$b[0]); $stmt->bindValue(':y1',$b[1]);
+    $stmt->bindValue(':x2',$b[2]); $stmt->bindValue(':y2',$b[3]);
+    $stmt->bindValue(':mil', $milM, PDO::PARAM_INT);
+    $stmt->execute();
+
+    $features = [];
+    foreach ($stmt as $row) {
+        $raw = $row['geojson'];
+        if (is_resource($raw)) $raw = stream_get_contents($raw);
+        if (!$raw) continue;
+        $g = json_decode((string)$raw, true);
+        if (!$g || empty($g['coordinates'])) continue;
+        unset($row['geojson']);
+        $dep   = $row['dep'];
+        $zone  = in_array($dep, $DEPS_IDF) ? 'IDF' : 'FRANCE';
+        $taux  = (float)($row['taux_total'] ?? 0) / 100;
+        $row['forfait_annee'] = $annee;
+        $row['forfait_zone']  = $zone;
+        $row['ta_estime_log'] = isset($forfMap[$zone]['Locaux à usage de logement'])
+            ? round($forfMap[$zone]['Locaux à usage de logement'] * $taux, 2) : null;
+        $row['ta_estime_aut'] = isset($forfMap[$zone]['Autres constructions'])
+            ? round($forfMap[$zone]['Autres constructions'] * $taux, 2) : null;
+        $row['taux_com']   = (float)($row['taux_zone'] ?? 0);
+        $row['taux_total'] = (float)($row['taux_total'] ?? 0);
+        $features[] = ['type'=>'Feature','geometry'=>$g,'properties'=>$row];
+    }
+    Flight::json(['type'=>'FeatureCollection','features'=>$features]);
+});
+
+Flight::route('GET /api/ta', function () {
+    $b = parseBbox();
+    if (!$b) { Flight::json(['error' => 'bbox requis'], 400); return; }
+    $db    = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $annee = (int)(Flight::request()->query['annee'] ?? 0);
+    if (!$annee) $annee = (int)$db->query("SELECT MAX(annee) FROM ta_forfaitaires")->fetchColumn();
+    $DEPS_IDF = ['75','77','78','91','92','93','94','95'];
+    // Valeurs forfaitaires pour l'année choisie (logement + autres constructions)
+    $forf = $db->prepare("SELECT zone, type_local, valeur FROM ta_forfaitaires WHERE annee=:a");
+    $forf->bindValue(':a', $annee, PDO::PARAM_INT);
+    $forf->execute();
+    $forfMap = [];
+    foreach ($forf->fetchAll() as $f) $forfMap[$f['zone']][$f['type_local']] = (float)$f['valeur'];
+
+    $sql = "SELECT t.code_insee, t.libcom, t.dep,
+                   t.taux_com, t.taux_dep, t.taux_reg, t.date_effet,
+                   ROUND(COALESCE(t.taux_com,0) + COALESCE(t.taux_dep,0) + COALESCE(t.taux_reg,0), 3) AS taux_total,
+                   t.val_forfait_station,
+                   t.exo_habitation, t.exo_pret_ptx, t.exo_industriel, t.exo_commerce,
+                   t.exo_immeubles_classes, t.exo_abris_jardin, t.exo_maisons_sante,
+                   t.exo_terrains_rehab, t.exo_transf_habitation,
+                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(
+                       CASE WHEN ST_SRID(c.geom)=4326 THEN c.geom ELSE ST_Transform(c.geom,4326) END,
+                   0.0002),4)::text AS geojson
+            FROM ta_taux t
+            JOIN communes_geom c ON c.insee = t.code_insee
+            WHERE ST_Intersects(
+                CASE WHEN ST_SRID(c.geom)=4326 THEN c.geom ELSE ST_Transform(c.geom,4326) END,
+                ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326))
+            LIMIT 2000";
+    $stmt = $db->prepare($sql);
+    $stmt->bindValue(':x1',$b[0]); $stmt->bindValue(':y1',$b[1]);
+    $stmt->bindValue(':x2',$b[2]); $stmt->bindValue(':y2',$b[3]);
+    $stmt->execute();
+
+    // Injecter ta_estime (logement et autres) dans chaque feature
+    $features = [];
+    foreach ($stmt as $row) {
+        $raw = $row['geojson'];
+        if (is_resource($raw)) $raw = stream_get_contents($raw);
+        $g = json_decode((string)$raw, true);
+        unset($row['geojson']);
+        $zone  = in_array($row['dep'], $DEPS_IDF) ? 'IDF' : 'FRANCE';
+        $taux  = (float)($row['taux_total'] ?? 0) / 100;
+        $row['forfait_annee']  = $annee;
+        $row['forfait_zone']   = $zone;
+        $row['ta_estime_log']  = isset($forfMap[$zone]['Locaux à usage de logement'])
+            ? round($forfMap[$zone]['Locaux à usage de logement'] * $taux, 2) : null;
+        $row['ta_estime_aut']  = isset($forfMap[$zone]['Autres constructions'])
+            ? round($forfMap[$zone]['Autres constructions'] * $taux, 2) : null;
+        $features[] = ['type' => 'Feature', 'geometry' => $g, 'properties' => $row];
+    }
+    Flight::json(['type' => 'FeatureCollection', 'features' => $features]);
+});
+
+Flight::route('GET /api/ta/departements', function () {
+    $db    = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $annee = (int)(Flight::request()->query['annee'] ?? 0);
+    if (!$annee) $annee = (int)$db->query("SELECT MAX(annee) FROM ta_forfaitaires")->fetchColumn();
+    $DEPS_IDF = ['75','77','78','91','92','93','94','95'];
+    $forf = $db->prepare("SELECT zone, type_local, valeur FROM ta_forfaitaires WHERE annee=:a");
+    $forf->bindValue(':a', $annee, PDO::PARAM_INT);
+    $forf->execute();
+    $forfMap = [];
+    foreach ($forf->fetchAll() as $f) $forfMap[$f['zone']][$f['type_local']] = (float)$f['valeur'];
+
+    $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
+                   ROUND(AVG(COALESCE(t.taux_com,0))::numeric,3) AS taux_com_moyen,
+                   MAX(t.taux_dep) AS taux_dep,
+                   MAX(t.taux_reg) AS taux_reg,
+                   ROUND(AVG(COALESCE(t.taux_com,0) + COALESCE(t.taux_dep,0) + COALESCE(t.taux_reg,0))::numeric,3) AS taux_total_moyen,
+                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(d.geom,0.01),4)::text AS geojson
+            FROM departements_geom_4326 d
+            JOIN ta_taux t ON LEFT(t.code_insee,2) = d.code_insee
+            GROUP BY d.code_insee, d.nom_officiel, d.geom";
+
+    $features = [];
+    foreach ($db->query($sql) as $row) {
+        $raw = $row['geojson'];
+        if (is_resource($raw)) $raw = stream_get_contents($raw);
+        $g = json_decode((string)$raw, true);
+        unset($row['geojson']);
+        $zone = in_array($row['code_dep'], $DEPS_IDF) ? 'IDF' : 'FRANCE';
+        $taux = (float)($row['taux_total_moyen'] ?? 0) / 100;
+        $row['forfait_annee']  = $annee;
+        $row['ta_estime_log']  = isset($forfMap[$zone]['Locaux à usage de logement'])
+            ? round($forfMap[$zone]['Locaux à usage de logement'] * $taux, 2) : null;
+        $row['ta_estime_aut']  = isset($forfMap[$zone]['Autres constructions'])
+            ? round($forfMap[$zone]['Autres constructions'] * $taux, 2) : null;
+        $features[] = ['type' => 'Feature', 'geometry' => $g, 'properties' => $row];
+    }
+    Flight::json(['type' => 'FeatureCollection', 'features' => $features]);
+});
+
+// ── TA majorée — sections + centroïds pour clusters ──────
+Flight::route('GET /api/ta/majore/millesimes', function () {
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $stmt = $db->query("SELECT DISTINCT millesime FROM ta_majore_sections ORDER BY millesime DESC");
+    Flight::json($stmt->fetchAll(PDO::FETCH_COLUMN));
+});
+
+Flight::route('GET /api/ta/majore', function () {
+    $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $b   = parseBbox();
+    $mil = (int)(Flight::request()->query['millesime'] ?? 0);
+    $milFilter  = $mil > 0 ? "AND millesime = $mil" : "";
+    // Sans bbox : on charge tout (accepté car ~1000 sections seulement)
+    // Avec bbox : filtre spatial
+    $bboxFilter = $b ? "AND ST_Intersects(geom, ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326))" : "";
+
+    // Sections depuis la vue matérialisée (déjà dédupliquée et simplifiée)
+    $sqlSect = "SELECT dep, commune, code_insee, libcom, prefixe, section,
+                    NULL::text AS parcelle,
+                    taux, date_effet, millesime,
+                    ST_AsGeoJSON(geom,4)::text AS geojson,
+                    ST_AsGeoJSON(centroid,6)::text AS centroid_geojson
+               FROM ta_majore_sections_latest
+               WHERE 1=1 $milFilter $bboxFilter";
+
+    // Parcelles (si table peuplée) : dédupliqué par dep+commune+section+parcelle
+    $sqlParc = "SELECT DISTINCT ON (dep, commune, section, parcelle)
+                    dep, commune, code_insee, libcom, prefixe, section, parcelle,
+                    taux, date_effet, millesime,
+                    ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom,0.0001),5)::text AS geojson,
+                    ST_AsGeoJSON(ST_Centroid(geom),6)::text AS centroid_geojson
+               FROM ta_majore_parcelles
+               WHERE 1=1 $milFilter $bboxFilter
+               ORDER BY dep, commune, section, parcelle, millesime DESC, taux DESC";
+
+    $polys  = [];
+    $points = [];
+    $seenSections = []; // sections couvertes par des parcelles → on les exclut des sections
+
+    // Charger les parcelles d'abord
+    try {
+        if ($b) {
+            $stmt = $db->prepare($sqlParc);
+            $stmt->bindValue(':x1',$b[0]); $stmt->bindValue(':y1',$b[1]);
+            $stmt->bindValue(':x2',$b[2]); $stmt->bindValue(':y2',$b[3]);
+        } else {
+            $stmt = $db->prepare($sqlParc);
+        }
+        $stmt->execute();
+        foreach ($stmt as $row) {
+            $key = $row['dep'].'|'.$row['commune'].'|'.$row['section'];
+            $seenSections[$key] = true;
+            $g = json_decode((string)(is_resource($row['geojson']) ? stream_get_contents($row['geojson']) : $row['geojson']), true);
+            $c = json_decode((string)(is_resource($row['centroid_geojson']) ? stream_get_contents($row['centroid_geojson']) : $row['centroid_geojson']), true);
+            $props = ['dep'=>$row['dep'],'commune'=>$row['commune'],'code_insee'=>$row['code_insee'],
+                      'libcom'=>$row['libcom'],'prefixe'=>$row['prefixe'],'section'=>$row['section'],
+                      'parcelle'=>$row['parcelle'],'taux'=>(float)$row['taux'],
+                      'date_effet'=>$row['date_effet'],'millesime'=>(int)$row['millesime']];
+            if ($g) $polys[]  = ['type'=>'Feature','geometry'=>$g,'properties'=>$props];
+            if ($c) $points[] = ['type'=>'Feature','geometry'=>$c,'properties'=>$props];
+        }
+    } catch (\Throwable $e) { /* table pas encore peuplée */ }
+
+    // Sections : exclure celles déjà couvertes par des parcelles
+    if ($b) {
+        $stmt = $db->prepare($sqlSect);
+        $stmt->bindValue(':x1',$b[0]); $stmt->bindValue(':y1',$b[1]);
+        $stmt->bindValue(':x2',$b[2]); $stmt->bindValue(':y2',$b[3]);
+    } else {
+        $stmt = $db->prepare($sqlSect);
+    }
+    $stmt->execute();
+    foreach ($stmt as $row) {
+        $key = $row['dep'].'|'.$row['commune'].'|'.$row['section'];
+        if (isset($seenSections[$key])) continue; // parcelles présentes → on skip la section
+        $g = json_decode((string)(is_resource($row['geojson']) ? stream_get_contents($row['geojson']) : $row['geojson']), true);
+        $c = json_decode((string)(is_resource($row['centroid_geojson']) ? stream_get_contents($row['centroid_geojson']) : $row['centroid_geojson']), true);
+        $props = ['dep'=>$row['dep'],'commune'=>$row['commune'],'code_insee'=>$row['code_insee'],
+                  'libcom'=>$row['libcom'],'prefixe'=>$row['prefixe'],'section'=>$row['section'],
+                  'parcelle'=>null,'taux'=>(float)$row['taux'],
+                  'date_effet'=>$row['date_effet'],'millesime'=>(int)$row['millesime']];
+        if ($g) $polys[]  = ['type'=>'Feature','geometry'=>$g,'properties'=>$props];
+        if ($c) $points[] = ['type'=>'Feature','geometry'=>$c,'properties'=>$props];
+    }
+
+    Flight::json([
+        'polygons' => ['type'=>'FeatureCollection','features'=>$polys],
+        'points'   => ['type'=>'FeatureCollection','features'=>$points],
+    ]);
+});
+
+// ── TA parcelles — appel direct API DGFIP par bbox ────────
+Flight::route('GET /api/ta/parcelles', function () {
+    $b = parseBbox();
+    if (!$b) { Flight::json(['error' => 'bbox requis'], 400); return; }
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+
+    // Trouver communes dans la bbox puis appeler DGFIP
+    $stmt = $db->prepare("
+        SELECT DISTINCT LEFT(code_insee,2) AS dep, code_com AS com
+        FROM sections_2025
+        WHERE ST_Intersects(geom, ST_Transform(ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326),2154))
+        LIMIT 20
+    ");
+    $stmt->bindValue(':x1',$b[0]); $stmt->bindValue(':y1',$b[1]);
+    $stmt->bindValue(':x2',$b[2]); $stmt->bindValue(':y2',$b[3]);
+    $stmt->execute();
+    $communes = $stmt->fetchAll();
+    if (!$communes) { Flight::json(['type'=>'FeatureCollection','features'=>[]]); return; }
+
+    // Construire filtre DGFIP
+    $filters = array_map(fn($c) => "(departement=\"{$c['dep']}\" AND commune=\"{$c['com']}\")", $communes);
+    $where   = 'date_fin is null AND zone_application="Communale" AND taux > 5 AND parcelle is not null AND (' . implode(' OR ', $filters) . ')';
+    $apiUrl  = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/delta_deliberation_tam_17_01_23/records'
+             . '?limit=2000&select=departement%2Ccommune%2Clibelle_commune%2Ctaux%2Cdate_effet%2Cprefixe%2Csection%2Cparcelle'
+             . '&' . http_build_query(['where' => $where]);
+    $ctx = stream_context_create(['http' => ['timeout'=>15,'user_agent'=>'Mozilla/5.0','ignore_errors'=>true]]);
+    $raw = @file_get_contents($apiUrl, false, $ctx);
+    if (!$raw) { Flight::json(['type'=>'FeatureCollection','features'=>[]]); return; }
+    $data = json_decode($raw, true);
+    $results = $data['results'] ?? [];
+
+    // Joindre avec parcelles_all pour la géométrie
+    $features = [];
+    foreach ($results as $r) {
+        $dep  = str_pad($r['departement'], 2, '0', STR_PAD_LEFT);
+        $com  = str_pad($r['commune'],     3, '0', STR_PAD_LEFT);
+        $pref = $r['prefixe'] ?? '0';
+        $sec  = $r['section'] ?? '';
+        $parc = $r['parcelle'] ?? '';
+        // Code parcelle = dep + com + prefixe(3) + section(2) + parcelle(4)
+        $codeParc = $dep . $com . str_pad($pref,3,'0',STR_PAD_LEFT) . str_pad($sec,2,' ',STR_PAD_LEFT) . str_pad($parc,4,'0',STR_PAD_LEFT);
+        $gStmt = $db->prepare("SELECT ST_AsGeoJSON(ST_Transform(geom,4326),5)::text FROM parcelles_all WHERE id_parcellaire = :id LIMIT 1");
+        $gStmt->bindValue(':id', $codeParc);
+        $gStmt->execute();
+        $gRow = $gStmt->fetch(PDO::FETCH_COLUMN);
+        if (!$gRow) continue;
+        $features[] = ['type'=>'Feature','geometry'=>json_decode($gRow,true),'properties'=>[
+            'code_insee' => $dep.$com,
+            'libcom'     => $r['libelle_commune'],
+            'section'    => $sec, 'parcelle' => $parc,
+            'taux'       => $r['taux'],
+            'date_effet' => $r['date_effet'],
+        ]];
+    }
+    Flight::json(['type'=>'FeatureCollection','features'=>$features]);
+});
+
+// ── TASS — Surfaces de stationnement IDF ─────────────────
+Flight::route('GET /api/tass/millesimes', function () {
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $stmt = $db->query("SELECT DISTINCT millesime FROM tass_tarifs ORDER BY millesime DESC");
+    Flight::json($stmt->fetchAll(PDO::FETCH_COLUMN));
+});
+
+Flight::route('GET /api/tass/tarifs', function () {
+    $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $mil = (int)(Flight::request()->query['millesime'] ?? 0);
+    if (!$mil) $mil = (int)$db->query("SELECT MAX(millesime) FROM tass_tarifs")->fetchColumn();
+    $stmt = $db->prepare("SELECT circonscription, tarif FROM tass_tarifs WHERE millesime=:m ORDER BY circonscription");
+    $stmt->bindValue(':m', $mil, PDO::PARAM_INT);
+    $stmt->execute();
+    Flight::json(['millesime' => $mil, 'tarifs' => $stmt->fetchAll()]);
+});
+
+Flight::route('GET /api/tass', function () {
+    $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $sql = "SELECT code_insee, libcom, dep, circonscription,
+                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.0001), 5)::text AS geojson
+            FROM tass_circonscriptions ORDER BY circonscription, code_insee";
+    Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($db->query($sql))]);
+});
+
+Flight::route('GET /api/tsb/millesimes', function () {
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $stmt = $db->query("SELECT DISTINCT millesime FROM tsb_circonscriptions ORDER BY millesime DESC");
+    Flight::json($stmt->fetchAll(PDO::FETCH_COLUMN));
+});
+
+Flight::route('GET /api/tsb/tarifs', function () {
+    $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $mil = (int)(Flight::request()->query['millesime'] ?? 0);
+    if (!$mil) $mil = (int)$db->query("SELECT MAX(millesime) FROM tsb_tarifs")->fetchColumn();
+    $stmt = $db->prepare("
+        SELECT region, circonscription, type_local, tarif
+        FROM tsb_tarifs WHERE millesime = :m
+        ORDER BY region, circonscription, type_local
+    ");
+    $stmt->bindValue(':m', $mil, PDO::PARAM_INT);
+    $stmt->execute();
+    Flight::json(['millesime' => $mil, 'tarifs' => $stmt->fetchAll()]);
+});
+
+Flight::route('GET /api/tsb/tarifs/millesimes', function () {
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $stmt = $db->query("SELECT DISTINCT millesime FROM tsb_tarifs ORDER BY millesime DESC");
+    Flight::json($stmt->fetchAll(PDO::FETCH_COLUMN));
+});
+
+Flight::route('POST /api/tsb/tarifs/import', function () {
+    $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $body      = Flight::request()->data;
+    $url       = trim($body['url']       ?? '');
+    $millesime = (int)($body['millesime'] ?? 0);
+
+    if (!$url || !filter_var($url, FILTER_VALIDATE_URL) || !str_contains($url, 'bofip.impots.gouv.fr')) {
+        Flight::json(['error' => 'URL BOFIP invalide'], 400); return;
+    }
+    if ($millesime < 2010 || $millesime > 2050) {
+        Flight::json(['error' => 'Millésime invalide'], 400); return;
+    }
+
+    // Parser via notre route BOFIP
+    $parsed = @json_decode(file_get_contents('http://localhost/api/bofip/parse?url=' . urlencode($url)), true);
+    if (!$parsed || empty($parsed['tables'])) {
+        Flight::json(['error' => 'Aucun tableau trouvé sur cette page'], 422); return;
+    }
+
+    // Mapping en-tête → circ
+    function circFromHeader(string $h): ?int {
+        $h = strtolower(iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$h));
+        if (preg_match('/premi|1.?re?|1ère/', $h)) return 1;
+        if (preg_match('/deuxi|2.?me/', $h))      return 2;
+        if (preg_match('/troisi|3.?me/', $h))      return 3;
+        if (preg_match('/quatri|4.?me/', $h))      return 4;
+        return null;
+    }
+    function parseTarif(string $s): ?float {
+        $s = preg_replace('/[^\d,.]/', '', $s);
+        $s = str_replace(',', '.', $s);
+        return is_numeric($s) ? (float)$s : null;
+    }
+    function isPaca(string $caption): bool {
+        $c = strtolower(iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$caption));
+        return str_contains($c,'bouches') || str_contains($c,'paca') || str_contains($c,'var') || str_contains($c,'provence');
+    }
+    function is2bis(string $caption): bool {
+        $c = strtolower(iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$caption));
+        return str_contains($c,'reduction') || str_contains($c,'reduit') || str_contains($c,'10 %') || str_contains($c,'derog');
+    }
+
+    $inserted = 0;
+    $stmt = $db->prepare("
+        INSERT INTO tsb_tarifs (millesime, region, circonscription, type_local, tarif, source_url)
+        VALUES (:mil,:reg,:circ,:type,:tarif,:url)
+        ON CONFLICT (millesime, region, COALESCE(circonscription,-1), type_local)
+        DO UPDATE SET tarif=EXCLUDED.tarif, source_url=EXCLUDED.source_url
+    ");
+
+    foreach ($parsed['tables'] as $tbl) {
+        $headers  = $tbl['headers'];
+        $rows     = $tbl['rows'];
+        $caption  = $tbl['caption'] ?? '';
+
+        // Filtrer les lignes sans tarif
+        $dataRows = array_filter($rows, fn($r) => count($r) > 1 && parseTarif($r[1] ?? '') !== null);
+        if (empty($dataRows)) continue;
+
+        if (isPaca($caption)) {
+            $region = 'PACA'; $circ = null;
+            foreach ($dataRows as $row) {
+                $t = parseTarif($row[1] ?? '');
+                if ($t === null) continue;
+                $stmt->execute([':mil'=>$millesime,':reg'=>$region,':circ'=>$circ,':type'=>trim($row[0]),':tarif'=>$t,':url'=>$url]);
+                $inserted++;
+            }
+        } elseif (is2bis($caption)) {
+            $region = 'IDF_2BIS'; $circ = 2;
+            foreach ($dataRows as $row) {
+                $t = parseTarif($row[1] ?? '');
+                if ($t === null) continue;
+                $stmt->execute([':mil'=>$millesime,':reg'=>$region,':circ'=>$circ,':type'=>trim($row[0]),':tarif'=>$t,':url'=>$url]);
+                $inserted++;
+            }
+        } else {
+            // IDF principale : colonnes → circs
+            $circCols = [];
+            foreach ($headers as $ci => $h) {
+                $c = circFromHeader($h);
+                if ($c) $circCols[$ci] = $c;
+            }
+            // Fallback : chercher dans la première ligne de données si headers sans circ
+            if (empty($circCols) && !empty($rows[0])) {
+                foreach ($rows[0] as $ci => $cell) {
+                    $c = circFromHeader((string)$cell);
+                    if ($c) $circCols[$ci] = $c;
+                }
+                $dataRows = array_slice(array_values($dataRows), 1);
+            }
+            if (empty($circCols)) continue;
+            foreach ($dataRows as $row) {
+                $type = trim($row[0] ?? '');
+                if (!$type) continue;
+                foreach ($circCols as $ci => $c) {
+                    $t = parseTarif($row[$ci] ?? '');
+                    if ($t === null) continue;
+                    $stmt->execute([':mil'=>$millesime,':reg'=>'IDF',':circ'=>$c,':type'=>$type,':tarif'=>$t,':url'=>$url]);
+                    $inserted++;
+                }
+            }
+        }
+    }
+
+    // Retourner le millésime mis à jour
+    $check = $db->prepare("SELECT region, circonscription, COUNT(*) AS n FROM tsb_tarifs WHERE millesime=:m GROUP BY region, circonscription ORDER BY region, circonscription");
+    $check->bindValue(':m', $millesime, PDO::PARAM_INT);
+    $check->execute();
+
+    Flight::json(['ok' => true, 'millesime' => $millesime, 'inserted' => $inserted, 'detail' => $check->fetchAll()]);
+});
+
+Flight::route('GET /api/tsb/stats', function () {
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $stmt = $db->query("
+        SELECT millesime,
+               COUNT(*) FILTER (WHERE region='IDF') AS idf_total,
+               COUNT(*) FILTER (WHERE region='IDF' AND circonscription=1) AS idf_c1,
+               COUNT(*) FILTER (WHERE region='IDF' AND circonscription=2) AS idf_c2,
+               COUNT(*) FILTER (WHERE region='IDF' AND dcsucs AND dep='92') AS idf_2bis,
+               COUNT(*) FILTER (WHERE region='IDF' AND circonscription=3) AS idf_c3,
+               COUNT(*) FILTER (WHERE region='IDF' AND circonscription=4) AS idf_c4,
+               COUNT(*) FILTER (WHERE region='IDF' AND dcsucs AND dep!='92') AS idf_dcsucs_derog,
+               COUNT(*) FILTER (WHERE region='PACA') AS paca_total
+        FROM tsb_circonscriptions
+        GROUP BY millesime ORDER BY millesime DESC
+    ");
+    Flight::json($stmt->fetchAll());
+});
+
+Flight::route('POST /api/tsb/import', function () {
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $body     = Flight::request()->data;
+    $url      = trim($body['url'] ?? '');
+    $millesime = (int)($body['millesime'] ?? 0);
+
+    if (!$url || !filter_var($url, FILTER_VALIDATE_URL) || !str_contains($url, 'bofip.impots.gouv.fr')) {
+        Flight::json(['error' => 'URL BOFIP invalide'], 400); return;
+    }
+    if ($millesime < 2010 || $millesime > 2050) {
+        Flight::json(['error' => 'Millésime invalide'], 400); return;
+    }
+
+    // Parser le BOFIP via notre route existante
+    $parseUrl = 'http://localhost/api/bofip/parse?url=' . urlencode($url);
+    $parsed = @json_decode(file_get_contents($parseUrl), true);
+    if (!$parsed || empty($parsed['listes'])) {
+        Flight::json(['error' => 'Aucune liste de communes trouvée sur cette page'], 422); return;
+    }
+
+    $listes = $parsed['listes'];
+    $nbDeps = count($listes);
+    $nbComs = array_sum(array_map('count', $listes));
+
+    // Normaliser les noms de communes → codes INSEE
+    function normStr(string $s): string {
+        $s = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $s);
+        return strtolower(preg_replace('/[\W_]+/', ' ', $s));
+    }
+
+    $stmt = $db->query("SELECT insee, nom FROM communes_geom WHERE LEFT(insee,2) IN ('77','78','91','92','93','94','95')");
+    $idxNom = [];
+    foreach ($stmt as $row) $idxNom[normStr($row['nom'])] = $row['insee'];
+
+    $dcsucs = [];
+    foreach ($listes as $depNom => $noms) {
+        foreach ($noms as $nom) {
+            $n = normStr($nom);
+            if (isset($idxNom[$n])) {
+                $dcsucs[] = $idxNom[$n];
+            } else {
+                foreach ($idxNom as $k => $v) {
+                    if (strpos($k, $n) !== false || strpos($n, $k) !== false) {
+                        $dcsucs[] = $v; break;
+                    }
+                }
+            }
+        }
+    }
+    $dcsucs = array_unique($dcsucs);
+
+    // Charger le template circ_naturelle (depuis n'importe quel millésime existant)
+    $template = $db->query("
+        SELECT DISTINCT ON (code_insee) code_insee, dep, libcom, circ_naturelle, region, geom
+        FROM tsb_circonscriptions ORDER BY code_insee, millesime DESC
+    ")->fetchAll();
+
+    $db->beginTransaction();
+    try {
+        $db->prepare("DELETE FROM tsb_circonscriptions WHERE millesime = :m")->execute([':m' => $millesime]);
+
+        $ins = $db->prepare("
+            INSERT INTO tsb_circonscriptions
+                (code_insee, dep, libcom, circonscription, region, dcsucs, millesime, circ_naturelle, geom)
+            VALUES (:ci, :dep, :lib, :circ, :reg, :dc, :mil, :cn, :geom)
+        ");
+        foreach ($template as $row) {
+            $isDcsucs = in_array($row['code_insee'], $dcsucs);
+            $circFinal = ($isDcsucs && $row['dep'] !== '92' && (int)$row['circ_naturelle'] === 3) ? 4 : (int)$row['circ_naturelle'];
+            $ins->execute([
+                ':ci' => $row['code_insee'], ':dep' => $row['dep'],
+                ':lib' => $row['libcom'],    ':circ' => $circFinal,
+                ':reg' => $row['region'],    ':dc' => $isDcsucs ? 't' : 'f',
+                ':mil' => $millesime,        ':cn' => $row['circ_naturelle'],
+                ':geom' => $row['geom'],
+            ]);
+        }
+        $db->commit();
+    } catch (\Throwable $e) {
+        $db->rollBack();
+        Flight::json(['error' => 'Erreur BDD : ' . $e->getMessage()], 500); return;
+    }
+
+    Flight::json([
+        'ok' => true,
+        'millesime' => $millesime,
+        'dcsucs_communes' => count($dcsucs),
+        'deps_parsed' => $nbDeps,
+        'communes_parsed' => $nbComs,
+        'total_inserted' => count($template),
+    ]);
+});
+
+Flight::route('GET /api/tsb', function () {
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $region = Flight::request()->query['region'] ?? '';
+    if (!in_array($region, ['IDF', 'PACA'], true)) {
+        Flight::json(['error' => 'region IDF ou PACA requise'], 400); return;
+    }
+    // Millésime : paramètre ou dernier disponible
+    $millesimeParam = Flight::request()->query['millesime'] ?? '';
+    if ($millesimeParam && preg_match('/^\d{4}$/', $millesimeParam)) {
+        $millesime = (int)$millesimeParam;
+    } else {
+        $millesime = (int)$db->query("SELECT MAX(millesime) FROM tsb_circonscriptions")->fetchColumn();
+    }
+    $sql = "SELECT code_insee, libcom, dep, circonscription, region, dcsucs, millesime,
+                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.0001), 5)::text AS geojson
+            FROM tsb_circonscriptions
+            WHERE region = :region AND millesime = :millesime
+            ORDER BY circonscription, code_insee";
+    $stmt = $db->prepare($sql);
+    $stmt->bindValue(':region', $region);
+    $stmt->bindValue(':millesime', $millesime, PDO::PARAM_INT);
     $stmt->execute();
     Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
 });
@@ -693,4 +1547,113 @@ Flight::route('GET /api/tarifs/departements', function () {
     $stmt->bindValue(':cat', $cat);
     $stmt->execute();
     Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
+});
+
+// ── BOFIP — parse tarifs / circonscriptions ───────────────
+Flight::route('GET /api/bofip/parse', function () {
+    $url = trim(Flight::request()->query['url'] ?? '');
+    if (!$url) { Flight::json(['error' => 'url requis'], 400); return; }
+    if (!filter_var($url, FILTER_VALIDATE_URL) || !str_contains($url, 'bofip.impots.gouv.fr')) {
+        Flight::json(['error' => 'URL invalide'], 400); return;
+    }
+
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 15,
+        'user_agent'    => 'Mozilla/5.0 (compatible; RSig/1.0)',
+        'ignore_errors' => true,
+    ]]);
+    $html = @file_get_contents($url, false, $ctx);
+    if (!$html) { Flight::json(['error' => 'Impossible de charger la page BOFIP'], 502); return; }
+
+    if (mb_detect_encoding($html, 'UTF-8', true) === false) {
+        $html = mb_convert_encoding($html, 'UTF-8', 'ISO-8859-1');
+    }
+
+    $doc = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
+    libxml_clear_errors();
+    $xpath = new DOMXPath($doc);
+
+    $result = ['tables' => [], 'listes' => [], 'titre' => '', 'millesime' => null];
+
+    // Titre
+    $titres = $xpath->query('//h1 | //h2');
+    if ($titres->length > 0) $result['titre'] = trim(preg_replace('/\s+/', ' ', $titres->item(0)->textContent));
+
+    // ── Tables : tarifs ──────────────────────────────────
+    foreach ($xpath->query('//table') as $table) {
+        $headers = [];
+        $rows    = [];
+        // Caption de la table
+        $captionNodes = $xpath->query('.//caption', $table);
+        $caption = $captionNodes->length > 0
+            ? trim(preg_replace('/\s+/', ' ', $captionNodes->item(0)->textContent))
+            : '';
+        foreach ($xpath->query('.//thead/tr/th | .//tr[1]/th', $table) as $th) {
+            $headers[] = trim(preg_replace('/\s+/', ' ', $th->textContent));
+        }
+        foreach ($xpath->query('.//tbody/tr | .//tr[position()>1]', $table) as $tr) {
+            $cells = [];
+            foreach ($xpath->query('.//td | .//th', $tr) as $td) {
+                $cells[] = trim(preg_replace('/\s+/', ' ', $td->textContent));
+            }
+            if (array_filter($cells)) $rows[] = $cells;
+        }
+        if ($headers && $rows) $result['tables'][] = ['caption' => $caption, 'headers' => $headers, 'rows' => $rows];
+    }
+
+    // ── Listes : communes DCSUCS ─────────────────────────
+    // 3 formats selon la version BOFIP :
+    //   A) <p>[.//strong] — "dans le département de X" en <strong> (2015-2022)
+    //   B) <li>[.//strong] — même contenu dans <li> (2023+)
+    //   C) <p> sans <strong> — "- dans le département de X : com1, com2" (2014)
+    $communes = [];
+
+    function extractDep(string $txt): ?string {
+        if (preg_match('/d[ée]partement\s+(?:de\s+la\s+|du\s+|des\s+|de\s+l[\'´`\x{2019}]\s*|de\s+)(.+)/ui', $txt, $m))
+            return trim(rtrim(trim($m[1]), ':'));
+        return null;
+    }
+    function extractComs(string $fullTxt): array {
+        $colonPos = strpos($fullTxt, ':');
+        if ($colonPos === false) return [];
+        $rest = trim(substr($fullTxt, $colonPos + 1));
+        $rest = rtrim($rest, '; .\xc2\xa0');
+        $rest = preg_replace('/\s+et\s+/ui', ',', $rest);
+        $rest = preg_replace('/\xc2\xa0/', ' ', $rest); // nbsp
+        return array_values(array_filter(array_map('trim', explode(',', $rest))));
+    }
+
+    // Formats A et B : nœuds <p> ou <li> contenant un <strong> avec "département"
+    foreach ($xpath->query('//p[.//strong]|//li[.//strong]') as $node) {
+        $strong = $xpath->query('.//strong', $node)->item(0);
+        if (!$strong) continue;
+        $depTxt = trim(preg_replace('/\s+/', ' ', $strong->textContent));
+        if (!preg_match('/d[ée]partement/ui', $depTxt)) continue;
+        $dep = extractDep($depTxt);
+        if (!$dep) continue;
+        $fullTxt = trim(preg_replace('/\s+/', ' ', $node->textContent));
+        $coms = extractComs($fullTxt);
+        if ($coms) $communes[$dep] = $coms;
+    }
+
+    // Format C : <p> sans <strong> contenant "dans le département de"
+    if (!$communes) {
+        foreach ($xpath->query('//p[not(.//strong)]') as $p) {
+            $txt = trim(preg_replace('/\s+/', ' ', $p->textContent));
+            if (!preg_match('/dans\s+le\s+d[ée]partement/ui', $txt)) continue;
+            $dep = extractDep($txt);
+            if (!$dep) continue;
+            $coms = extractComs($txt);
+            if ($coms) $communes[$dep] = $coms;
+        }
+    }
+
+    if ($communes) $result['listes'] = $communes;
+
+    // Millésime depuis l'URL
+    if (preg_match('/(\d{8})$/', $url, $m)) $result['millesime'] = substr($m[1], 0, 4);
+
+    Flight::json($result);
 });
