@@ -8,7 +8,7 @@ let loadId = 0;
 const deptCache   = {};
 const breaksCache = {};
 
-const DEPT_ZOOM = 9;
+const DEPT_ZOOM = 11;
 
 function bboxParam(map) {
     const b = map.getBounds();
@@ -88,7 +88,6 @@ export function loadTf(map) {
     const level = zoom < DEPT_ZOOM ? 'dept' : 'commune';
     const myId  = ++loadId;
 
-    const bKey = cacheKey(cat, annee);
     const render = (fc, renderLevel) => {
         if (myId !== loadId || !active) return;
         if (!fc?.features?.length) {
@@ -96,7 +95,8 @@ export function loadTf(map) {
                 map.getSource('tf-src').setData({ type: 'FeatureCollection', features: [] });
             return;
         }
-        // Breaks stables : calculés une fois par cat+annee, jamais recalculés sur un pan
+        // Breaks stables : calculés une fois par cat+annee+level, jamais recalculés sur un pan
+        const bKey = cacheKey(cat, annee) + '_' + renderLevel;
         if (!breaksCache[bKey]) {
             const values = fc.features.map(f => +f.properties.tf_estime);
             breaksCache[bKey] = quantileBreaks(values, 6);

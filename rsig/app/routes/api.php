@@ -441,21 +441,24 @@ Flight::route('GET /api/cfe', function () {
     if (!$cat || !preg_match('/^[A-Z]{3}[0-9]$/', $cat)) { Flight::json(['error' => 'categorie requise'], 400); return; }
     $annee = validateAnnee(Flight::request()->query['annee'] ?? '');
     $col   = "val_$annee";
-    $sql = "SELECT DISTINCT ON (s.code_insee, s.section)
-                   s.code_insee, s.section, s.secteur, s.nom_com AS libcom,
+    $sql = "SELECT g.code_insee, g.section, g.secteur, g.libcom,
                    v.millesime, v.taux_cfe_total, v.coeff_neut_com, v.indicateur_cfe_m2,
                    ROUND((v.indicateur_cfe_m2 * t.$col::numeric)::numeric,4) AS cfe_estime,
                    ROUND(t.$col::numeric,2) AS tarif_section,
-                   ST_AsGeoJSON(ST_Transform(ST_SimplifyPreserveTopology(s.geom,2),4326),4)::text AS geojson
-            FROM sections_2025 s
-            JOIN tarifs_pivot t
-              ON t.dep = CASE WHEN s.code_dep='97' THEN left(s.code_insee,3) ELSE s.code_dep END
-             AND t.num_secteur = s.secteur AND t.categorie = :cat
-            JOIN cfe_calcul v ON v.code_insee = s.code_insee
-            WHERE ST_Intersects(s.geom, ST_Transform(ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326),2154))
-              AND t.$col IS NOT NULL
-              AND v.indicateur_cfe_m2 IS NOT NULL
-            LIMIT 2000";
+                   ST_AsGeoJSON(ST_Transform(ST_SimplifyPreserveTopology(g.geom,2),4326),4)::text AS geojson
+            FROM (
+                SELECT code_insee, section,
+                       MIN(secteur) AS secteur, MIN(nom_com) AS libcom,
+                       ST_Union(geom) AS geom,
+                       CASE WHEN MIN(code_dep)='97' THEN left(MIN(code_insee),3) ELSE MIN(code_dep) END AS dep
+                FROM sections_2025
+                WHERE ST_Intersects(geom, ST_Transform(ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326),2154))
+                GROUP BY code_insee, section
+            ) g
+            JOIN tarifs_pivot t ON t.dep = g.dep AND t.num_secteur = g.secteur AND t.categorie = :cat AND t.$col IS NOT NULL
+            JOIN cfe_calcul v ON v.code_insee = g.code_insee
+            WHERE v.indicateur_cfe_m2 IS NOT NULL
+            LIMIT 5000";
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':cat', $cat);
     $stmt->bindValue(':x1',$b[0]); $stmt->bindValue(':y1',$b[1]);
@@ -503,23 +506,26 @@ Flight::route('GET /api/tf', function () {
     if (!$cat || !preg_match('/^[A-Z]{3}[0-9]$/', $cat)) { Flight::json(['error' => 'categorie requise'], 400); return; }
     $annee = validateAnnee(Flight::request()->query['annee'] ?? '');
     $col   = "val_$annee";
-    $sql = "SELECT DISTINCT ON (s.code_insee, s.section)
-                   s.code_insee, s.section, s.secteur, s.nom_com AS libcom,
-                   v.millesime, v.taux_tf_total, v.taux_com, v.taux_synd, v.taux_epci,
-                   v.taux_tse, v.taux_gemapi, v.taux_tasa, v.taux_teom,
-                   v.indicateur_tf_m2,
+    $sql = "SELECT g.code_insee, g.section, g.secteur, g.libcom,
+                   v.millesime, v.taux_tf_total, v.taux_com, v.taux_synd,
+                   v.taux_epci, v.taux_tse, v.taux_gemapi, v.taux_tasa,
+                   v.taux_teom, v.indicateur_tf_m2,
                    ROUND((v.indicateur_tf_m2 * t.$col::numeric)::numeric,4) AS tf_estime,
                    ROUND(t.$col::numeric,2) AS tarif_section,
-                   ST_AsGeoJSON(ST_Transform(ST_SimplifyPreserveTopology(s.geom,2),4326),4)::text AS geojson
-            FROM sections_2025 s
-            JOIN tarifs_pivot t
-              ON t.dep = CASE WHEN s.code_dep='97' THEN left(s.code_insee,3) ELSE s.code_dep END
-             AND t.num_secteur = s.secteur AND t.categorie = :cat
-            JOIN tf_calcul v ON v.code_insee = s.code_insee AND v.millesime = :annee
-            WHERE ST_Intersects(s.geom, ST_Transform(ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326),2154))
-              AND t.$col IS NOT NULL
-              AND v.indicateur_tf_m2 IS NOT NULL AND v.indicateur_tf_m2 > 0
-            LIMIT 2000";
+                   ST_AsGeoJSON(ST_Transform(ST_SimplifyPreserveTopology(g.geom,2),4326),4)::text AS geojson
+            FROM (
+                SELECT code_insee, section,
+                       MIN(secteur) AS secteur, MIN(nom_com) AS libcom,
+                       ST_Union(geom) AS geom,
+                       CASE WHEN MIN(code_dep)='97' THEN left(MIN(code_insee),3) ELSE MIN(code_dep) END AS dep
+                FROM sections_2025
+                WHERE ST_Intersects(geom, ST_Transform(ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326),2154))
+                GROUP BY code_insee, section
+            ) g
+            JOIN tarifs_pivot t ON t.dep = g.dep AND t.num_secteur = g.secteur AND t.categorie = :cat AND t.$col IS NOT NULL
+            JOIN tf_calcul v ON v.code_insee = g.code_insee AND v.millesime = :annee
+            WHERE v.indicateur_tf_m2 IS NOT NULL AND v.indicateur_tf_m2 > 0
+            LIMIT 5000";
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':cat', $cat);
     $stmt->bindValue(':annee', (int)$annee, PDO::PARAM_INT);
