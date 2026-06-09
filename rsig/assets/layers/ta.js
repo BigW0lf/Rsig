@@ -204,7 +204,7 @@ export function initTa(map) {
     toggle?.addEventListener('change', () => {
         active = toggle.checked;
         options?.classList.toggle('hidden', !active);
-        if (!active) { remove(map); dropLegend('ta'); clearInfo('ta'); }
+        if (!active) { if (abortCtrl) abortCtrl.abort(); remove(map); dropLegend('ta'); clearInfo('ta'); }
         else loadTa(map);
     });
 
@@ -214,12 +214,11 @@ export function initTa(map) {
         if (active) loadTa(map);
     });
     anneeSel?.addEventListener('change', () => {
-        // Invalider le cache département et recharger
         deptCache = { fc: null, annee: null };
         if (active) loadTa(map);
     });
 
-    map.on('moveend', () => { if (active) loadTa(map); });
+    // Pas de map.on('moveend') ici — géré de façon centralisée et debouncée dans map.js
 
     return { load: () => loadTa(map), isActive: () => active };
 }

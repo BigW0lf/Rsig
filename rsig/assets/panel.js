@@ -1,5 +1,5 @@
 const panelRight = document.getElementById('panel-right');
-document.getElementById('close-right').addEventListener('click', () => panelRight.classList.add('hidden'));
+document.getElementById('close-right').addEventListener('click', () => panelRight.classList.add('panel-closed'));
 
 // Sections par couche affichées dans le panneau
 const _sections = {};
@@ -7,7 +7,7 @@ const _sections = {};
 function _renderPanel() {
     const keys = ['taux', 'tarifs', 'coeff', 'cfe', 'tf', 'ta', 'ta-majore', 'sections', 'tsb', 'tass', 'zfu', 'dossiers'];
     const active = keys.filter(k => _sections[k]);
-    if (!active.length) { panelRight.classList.add('hidden'); return; }
+    if (!active.length) { panelRight.classList.add('panel-closed'); return; }
     const first = _sections[active[0]];
     document.getElementById('info-title').textContent = first.title;
     document.getElementById('info-content').innerHTML = active.map((k, i) => {
@@ -15,7 +15,7 @@ function _renderPanel() {
         if (i === 0) return `<div class="info-section">${s.html}</div>`;
         return `<div class="info-section-sep">${s.title}</div><div class="info-section">${s.html}</div>`;
     }).join('');
-    panelRight.classList.remove('hidden');
+    panelRight.classList.remove('panel-closed');
 }
 
 export function showInfo(layerKey, title, html) {

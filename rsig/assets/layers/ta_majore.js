@@ -180,6 +180,7 @@ function load(map) {
         .then(r => r.json())
         .then(data => {
             hideSpinner();
+            if (!active) return;
             const polys  = data.polygons;
             const points = data.points;
             if (!polys?.features?.length) return;

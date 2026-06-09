@@ -12,13 +12,20 @@ export function loadDossiers(map) {
         .then(r => r.json())
         .then(fc => {
             hideSpinner();
-            if (!fc?.features?.length) return;
+            if (!active || !fc?.features?.length) return;
+
+            // Enregistrer le dataset complet dans le filtre si disponible
+            const filter = window._dossiersFilter;
+            if (filter) filter.setFullData(fc);
+
+            // Appliquer les filtres éventuellement déjà posés avant le chargement
+            const displayFc = filter ? filter.applyFilters(fc) : fc;
 
             const tfVals = fc.features.map(f => +f.properties.apo_montanttaxefonciere).filter(v => isFinite(v) && v > 0);
             const breaks = computeBreaks(tfVals, 5);
             const color  = stepExpr('apo_montanttaxefonciere', breaks, PAL.tf, '#94a3b8');
 
-            map.addSource('dossiers-src', { type: 'geojson', data: fc, cluster: true, clusterRadius: 40 });
+            map.addSource('dossiers-src', { type: 'geojson', data: displayFc, cluster: true, clusterRadius: 40 });
             map.addLayer({ id: 'dossiers-circle', type: 'circle', source: 'dossiers-src',
                 filter: ['!', ['has', 'point_count']],
                 paint: { 'circle-color': color, 'circle-radius': 7, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' } });

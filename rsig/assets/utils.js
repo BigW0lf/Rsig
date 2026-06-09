@@ -1,8 +1,24 @@
-// ── Spinner ───────────────────────────────────────────────
+// ── Spinner — compteur de références ─────────────────────
 const _spinner = document.getElementById('map-spinner');
+let _spinnerCount = 0;
 let _spinnerTimer = null;
-export function showSpinner() { _spinnerTimer = setTimeout(() => { if (_spinner) _spinner.style.display = 'flex'; }, 300); }
-export function hideSpinner() { clearTimeout(_spinnerTimer); if (_spinner) _spinner.style.display = 'none'; }
+
+export function showSpinner() {
+    _spinnerCount++;
+    if (_spinnerCount === 1) {
+        clearTimeout(_spinnerTimer);
+        _spinnerTimer = setTimeout(() => {
+            if (_spinnerCount > 0 && _spinner) _spinner.style.display = 'flex';
+        }, 200);
+    }
+}
+export function hideSpinner() {
+    _spinnerCount = Math.max(0, _spinnerCount - 1);
+    if (_spinnerCount === 0) {
+        clearTimeout(_spinnerTimer);
+        if (_spinner) _spinner.style.display = 'none';
+    }
+}
 
 // ── Debounce ──────────────────────────────────────────────
 export function debounce(fn, delay) {
@@ -47,31 +63,45 @@ export const PAL = {
     cfe:     ['#ffffb2', '#fed976', '#feb24c', '#fd8d3c', '#f03b20', '#bd0026'],
 };
 
-// ── Ordre des couches (appelé après chaque rendu) ─────────
+// ── Ordre des couches — RAF-debounced (1 seul passage/frame) ─
+let _bddPending = false;
+let _bddMap = null;
+
 export function bddOnTop(map) {
-    // 1. Taux/tarifs/sections/CFE/ZFU en bas
-    ['taux-fill','taux-line','tarifs-fill','tarifs-line','sections-fill','cfe-fill','cfe-line','tf-fill','tf-line','ta-fill','ta-line','tsb-idf-fill','tsb-idf-line','tsb-paca-fill','tsb-paca-line','tass-fill','tass-line','zfu-fill','zfu-line'].forEach(id => {
-        if (map.getLayer(id)) map.moveLayer(id);
-    });
-    // 2. Coeff polygones (hachures)
-    for (let i = 0; i < 10; i++) {
-        if (map.getLayer(`coeff-hatch-${i}`)) map.moveLayer(`coeff-hatch-${i}`);
-    }
-    ['coeff-fill','coeff-line'].forEach(id => { if (map.getLayer(id)) map.moveLayer(id); });
-    // 3. Clusters coeff
-    ['coeff-cluster-circle','coeff-cluster-cluster','coeff-cluster-count'].forEach(id => {
-        if (map.getLayer(id)) map.moveLayer(id);
-    });
-    // 4. TA majorée (hachures + polygones + clusters) — priorité haute
-    ['ta-maj-fill','ta-maj-line'].forEach(id => { if (map.getLayer(id)) map.moveLayer(id); });
-    for (let i = 0; i < 5; i++) {
-        if (map.getLayer(`ta-maj-hatch-${i}`)) map.moveLayer(`ta-maj-hatch-${i}`);
-    }
-    ['ta-maj-cluster','ta-maj-cluster-count','ta-maj-point'].forEach(id => {
-        if (map.getLayer(id)) map.moveLayer(id);
-    });
-    // 5. Dossiers tout en haut
-    ['dossiers-circle','dossiers-cluster','dossiers-cluster-count'].forEach(id => {
-        if (map.getLayer(id)) map.moveLayer(id);
+    _bddMap = map;
+    if (_bddPending) return;
+    _bddPending = true;
+    requestAnimationFrame(() => {
+        _bddPending = false;
+        const m = _bddMap;
+        if (!m) return;
+        // 1. Couches de base (remplissage + contour)
+        ['taux-fill','taux-line','tarifs-fill','tarifs-line','sections-fill',
+         'cfe-fill','cfe-line','tf-fill','tf-line',
+         'ta-fill','ta-line',
+         'tsb-idf-fill','tsb-idf-line','tsb-paca-fill','tsb-paca-line',
+         'tass-fill','tass-line','zfu-fill','zfu-line',
+        ].forEach(id => { if (m.getLayer(id)) m.moveLayer(id); });
+        // 2. Hachures coeff
+        for (let i = 0; i < 10; i++) {
+            if (m.getLayer(`coeff-hatch-${i}`)) m.moveLayer(`coeff-hatch-${i}`);
+        }
+        ['coeff-fill','coeff-line'].forEach(id => { if (m.getLayer(id)) m.moveLayer(id); });
+        // 3. Clusters coeff
+        ['coeff-cluster-circle','coeff-cluster-cluster','coeff-cluster-count'].forEach(id => {
+            if (m.getLayer(id)) m.moveLayer(id);
+        });
+        // 4. TA majorée
+        ['ta-maj-fill','ta-maj-line'].forEach(id => { if (m.getLayer(id)) m.moveLayer(id); });
+        for (let i = 0; i < 5; i++) {
+            if (m.getLayer(`ta-maj-hatch-${i}`)) m.moveLayer(`ta-maj-hatch-${i}`);
+        }
+        ['ta-maj-cluster','ta-maj-cluster-count','ta-maj-point'].forEach(id => {
+            if (m.getLayer(id)) m.moveLayer(id);
+        });
+        // 5. Dossiers — tout en haut
+        ['dossiers-circle','dossiers-cluster','dossiers-cluster-count'].forEach(id => {
+            if (m.getLayer(id)) m.moveLayer(id);
+        });
     });
 }

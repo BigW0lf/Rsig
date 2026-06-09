@@ -9,6 +9,30 @@ function isAuthenticated(): bool {
     return isset($_SESSION['user_tid']) && $_SESSION['user_tid'] === DYN_TENANT_ID;
 }
 
+function isAdmin(): bool {
+    // En local (AUTH_ENABLED=false), pas d'auth → admin par défaut
+    if (!AUTH_ENABLED) return true;
+    if (!isAuthenticated()) return false;
+    $adminEmail = ADMIN_EMAIL;
+    if (!$adminEmail) return false;
+    return strtolower($_SESSION['user_email'] ?? '') === strtolower($adminEmail);
+}
+
+function requireAdmin(): void {
+    requireAuth();
+    if (!isAdmin()) {
+        http_response_code(403);
+        echo '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>403 Accès refusé</title>'
+           . '<link rel="stylesheet" href="/assets/style.css"></head><body>'
+           . '<div style="padding:60px;text-align:center">'
+           . '<h2 style="color:var(--accent)">Accès refusé</h2>'
+           . '<p style="color:var(--text2)">Cette page est réservée à l\'administrateur.</p>'
+           . '<a href="/" class="btn" style="display:inline-block;margin-top:16px">← Retour à la carte</a>'
+           . '</div></body></html>';
+        exit;
+    }
+}
+
 function requireAuth(): void {
     if (!AUTH_ENABLED) return;
     if (isAuthenticated()) return;

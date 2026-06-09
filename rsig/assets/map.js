@@ -12,6 +12,8 @@ import { initTaMajore } from './layers/ta_majore.js';
 import { initSections }          from './layers/sections.js';
 import { initCfe }               from './layers/cfe.js';
 import { initTf }                from './layers/tf.js';
+import { initCatalogue }         from './catalogue.js';
+import { initDossiersFilter }    from './dossiers-filter.js';
 
 // Pré-charge les catégories tarifs avant que la carte soit prête
 const catsReady = fetch('/api/tarifs/categories').then(r => r.json()).catch(() => []);
@@ -83,6 +85,9 @@ window.afficherSurCarte = function (lat, lon, classif) {
 };
 
 map.on('load', () => {
+    // Initialiser le catalogue AVANT les couches (pour que le DOM soit prêt)
+    initCatalogue(map);
+
     const taux     = initTaux(map);
     const coeff    = initCoeff(map);
     const zfu      = initZfu(map);
@@ -90,6 +95,8 @@ map.on('load', () => {
     const tass     = initTass(map);
     const ta       = initTa(map);
     const taMajore = initTaMajore(map);
+    // Filtre dossiers — doit être init avant initDossiers pour que setFullData soit disponible
+    window._dossiersFilter = initDossiersFilter(map);
     const dossiers = initDossiers(map);
     const tarifs   = initTarifs(map, catsReady);
     const sections = initSections(map);
@@ -118,7 +125,8 @@ map.on('load', () => {
         if (sections.isActive()) sections.load();
         if (cfe.isActive())      cfe.load();
         if (tf.isActive())       tf.load();
-    }, 400));
+        if (ta.isActive())       ta.load();
+    }, 200));
 
     updateWfs(map);
 });

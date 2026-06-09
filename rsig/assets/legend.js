@@ -2,7 +2,8 @@ import { fmtVal } from './utils.js';
 
 const legendEl    = document.getElementById('legend');
 const legendItems = document.getElementById('legend-items');
-const state = {};
+const state   = {}; // key → { title, breaks, pal, suffix }
+const hidden  = new Set(); // clés dont l'œil est fermé
 
 export function saveLegend(key, title, breaks, pal, suffix = '') {
     state[key] = { title, breaks, pal, suffix };
@@ -11,11 +12,18 @@ export function saveLegend(key, title, breaks, pal, suffix = '') {
 
 export function dropLegend(key) {
     delete state[key];
+    hidden.delete(key);
+    _render();
+}
+
+export function setLegendVisible(key, visible) {
+    if (visible) hidden.delete(key);
+    else hidden.add(key);
     _render();
 }
 
 function _render() {
-    const keys = ['taux', 'sections', 'coeff', 'cfe', 'tf', 'ta', 'ta-majore', 'tarifs', 'tsb-IDF', 'tsb-PACA', 'tass', 'zfu', 'dossiers'].filter(k => state[k]);
+    const keys = ['taux', 'sections', 'coeff', 'cfe', 'tf', 'ta', 'ta-majore', 'tarifs', 'tsb-IDF', 'tsb-PACA', 'tass', 'zfu', 'dossiers'].filter(k => state[k] && !hidden.has(k));
     if (!keys.length) { legendEl.classList.add('hidden'); return; }
     legendItems.innerHTML = keys.map(k => {
         const { title, breaks, pal, suffix } = state[k];

@@ -4,6 +4,7 @@ import { showInfo, clearInfo, irow } from '../panel.js';
 
 let active = false;
 let abortCtrl = null;
+let loadId = 0;
 const cache = {};
 
 const DEPT_ZOOM    = 9;
@@ -76,7 +77,9 @@ export function loadSections(map) {
     if (!active) return;
     const zoom  = map.getZoom();
     const level = getLevel(zoom);
+    const myId  = ++loadId;
     const render = (fc, renderLevel) => {
+        if (myId !== loadId || !active) return;
         if (getLevel(map.getZoom()) !== renderLevel) return;
         if (!fc?.features?.length) {
             if (map.getSource('sections-src'))
@@ -110,7 +113,7 @@ export function initSections(map) {
     toggle.addEventListener('change', () => {
         active = toggle.checked;
         options.classList.toggle('hidden', !active);
-        if (!active) { remove(map); dropLegend('sections'); clearInfo('sections'); }
+        if (!active) { if (abortCtrl) abortCtrl.abort(); remove(map); dropLegend('sections'); clearInfo('sections'); }
         else loadSections(map);
     });
 

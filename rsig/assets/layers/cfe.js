@@ -5,7 +5,8 @@ import { showInfo, clearInfo, irow } from '../panel.js';
 let active = false;
 let abortCtrl = null;
 let loadId = 0;
-const deptCache = {};
+const deptCache   = {};
+const breaksCache = {};
 
 const DEPT_ZOOM = 9;
 
@@ -90,15 +91,20 @@ export function loadCfe(map) {
 
     const myId = ++loadId;
 
+    const bKey = cacheKey(cat, annee);
     const render = (fc, renderLevel) => {
-        if (myId !== loadId) return;
+        if (myId !== loadId || !active) return;
         if (!fc?.features?.length) {
             if (map.getSource('cfe-src'))
                 map.getSource('cfe-src').setData({ type: 'FeatureCollection', features: [] });
             return;
         }
-        const values = fc.features.map(f => +f.properties.cfe_estime);
-        const breaks = quantileBreaks(values, 6);
+        // Breaks stables : calculés une fois par cat+annee, jamais recalculés sur un pan
+        if (!breaksCache[bKey]) {
+            const values = fc.features.map(f => +f.properties.cfe_estime);
+            breaksCache[bKey] = quantileBreaks(values, 6);
+        }
+        const breaks = breaksCache[bKey];
         if (!breaks) return;
         upsert(map, fc, stepExpr('cfe_estime', breaks, PAL.cfe));
         const niveauLabel = renderLevel === 'dept' ? 'moy. par département' : 'communes';
@@ -126,13 +132,14 @@ export function initCfe(map) {
 
     function onOptionChange() {
         Object.keys(deptCache).forEach(k => delete deptCache[k]);
+        Object.keys(breaksCache).forEach(k => delete breaksCache[k]);
         if (active) loadCfe(map);
     }
 
     toggle.addEventListener('change', () => {
         active = toggle.checked;
         options.classList.toggle('hidden', !active);
-        if (!active) { remove(map); dropLegend('cfe'); clearInfo('cfe'); }
+        if (!active) { if (abortCtrl) abortCtrl.abort(); remove(map); dropLegend('cfe'); clearInfo('cfe'); }
         else loadCfe(map);
     });
 

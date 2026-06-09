@@ -78,29 +78,32 @@ function ensureHatchForColor(map, colorHex, key) {
     _hatchCache[key] = true;
 }
 
-// Crée une source GeoJSON séparée par classe de couleur pour le hachurage
+// Met à jour (ou crée) les sources hachurées par classe de couleur — setData si déjà existantes
 function buildHatchSources(map, fc, breaks, palette, propKey, beforeLayer) {
-    // Nettoie les sources de hachures précédentes
-    for (let i = 0; i < 12; i++) {
-        if (map.getLayer(`coeff-hatch-${i}`)) map.removeLayer(`coeff-hatch-${i}`);
-        if (map.getSource(`coeff-hatch-src-${i}`)) map.removeSource(`coeff-hatch-src-${i}`);
-    }
     if (!breaks?.length) return;
     palette.forEach((col, i) => {
-        const key = `coeff-hatch-img-${col.replace('#','')}`;
-        ensureHatchForColor(map, col, key);
-        // Features de cette classe
-        const lo = breaks[i] ?? -Infinity;
-        const hi = breaks[i + 1] ?? Infinity;
+        const imgKey = `coeff-hatch-img-${col.replace('#','')}`;
+        ensureHatchForColor(map, col, imgKey);
+        const lo    = breaks[i] ?? -Infinity;
+        const hi    = breaks[i + 1] ?? Infinity;
         const feats = fc.features.filter(f => {
             const v = f.properties[propKey];
             return v != null && +v >= lo && (i === palette.length - 1 ? true : +v < hi);
         });
-        if (!feats.length) return;
+        const data  = { type: 'FeatureCollection', features: feats };
         const srcId = `coeff-hatch-src-${i}`;
-        map.addSource(srcId, { type: 'geojson', data: { type: 'FeatureCollection', features: feats } });
-        map.addLayer({ id: `coeff-hatch-${i}`, type: 'fill', source: srcId,
-            paint: { 'fill-pattern': key } }, beforeLayer);
+        if (map.getSource(srcId)) {
+            // Source déjà créée : mise à jour sans remove/add
+            map.getSource(srcId).setData(data);
+            if (map.getLayer(`coeff-hatch-${i}`)) {
+                map.setLayoutProperty(`coeff-hatch-${i}`, 'visibility', feats.length ? 'visible' : 'none');
+            }
+        } else {
+            if (!feats.length) return;
+            map.addSource(srcId, { type: 'geojson', data });
+            map.addLayer({ id: `coeff-hatch-${i}`, type: 'fill', source: srcId,
+                paint: { 'fill-pattern': imgKey } }, beforeLayer);
+        }
     });
 }
 
@@ -257,7 +260,7 @@ export function initCoeff(map) {
     toggle.addEventListener('change', () => {
         active = toggle.checked;
         options.classList.toggle('hidden', !active);
-        if (!active) { removePoly(map); removeClusters(map); dropLegend('coeff'); clearInfo('coeff'); polyCache = null; }
+        if (!active) { if (abortCtrl) abortCtrl.abort(); removePoly(map); removeClusters(map); dropLegend('coeff'); clearInfo('coeff'); polyCache = null; }
         else loadCoeff(map);
     });
     champEl.addEventListener('change', () => { polyCache = null; clusterCache = null; clearInfo('coeff'); loadCoeff(map); });

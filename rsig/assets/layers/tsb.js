@@ -27,6 +27,8 @@ let activeIdf  = false;
 let activePaca = false;
 let loadedIdf  = false;
 let loadedPaca = false;
+let ctrlIdf  = null;
+let ctrlPaca = null;
 
 // Pré-charge les millésimes disponibles
 const millesimesReady = fetch('/api/tsb/millesimes').then(r => r.json()).catch(() => [2025]);
@@ -58,12 +60,19 @@ function getMillesime(region) {
 }
 
 function loadRegion(map, region) {
+    const isIdf = region === 'IDF';
+    if (isIdf) { if (ctrlIdf) ctrlIdf.abort(); ctrlIdf = new AbortController(); }
+    else        { if (ctrlPaca) ctrlPaca.abort(); ctrlPaca = new AbortController(); }
+    const signal = isIdf ? ctrlIdf.signal : ctrlPaca.signal;
+    const activeFlag = () => isIdf ? activeIdf : activePaca;
+
     showSpinner();
     const mil = getMillesime(region);
-    fetch(`/api/tsb?region=${region}${mil ? '&millesime=' + mil : ''}`)
+    fetch(`/api/tsb?region=${region}${mil ? '&millesime=' + mil : ''}`, { signal })
         .then(r => r.json())
         .then(fc => {
             hideSpinner();
+            if (!activeFlag()) return;
             if (!fc?.features?.length) return;
 
             // Expressions MapLibre couleur par circonscription (+ 2bis pour DCSUCS dep 92)
@@ -115,7 +124,7 @@ function loadRegion(map, region) {
             map.on('mouseenter', `tsb-${region.toLowerCase()}-fill`, () => map.getCanvas().style.cursor = 'pointer');
             map.on('mouseleave', `tsb-${region.toLowerCase()}-fill`, () => map.getCanvas().style.cursor = '');
         })
-        .catch(e => { hideSpinner(); console.error(`tsb-${region}`, e); });
+        .catch(e => { hideSpinner(); if (e.name !== 'AbortError') console.error(`tsb-${region}`, e); });
 }
 
 export function initTsb(map) {

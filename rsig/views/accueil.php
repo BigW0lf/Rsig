@@ -27,8 +27,13 @@
     <a href="#" class="active" data-page="carte">Carte</a>
     <a href="#" data-page="requetes">Requêtes</a>
     <a href="#" data-page="bofip">BOFIP</a>
+    <?php if (isAdmin()): ?>
     <a href="#" data-page="maj">Mise à jour</a>
+    <a href="#" data-page="donnees">Données</a>
+    <a href="/admin/stats" target="_blank" style="margin-left:auto;font-size:0.78rem;opacity:.8" title="Stats d'utilisation">📊 Stats</a>
+    <?php else: ?>
     <a href="#" data-page="donnees" style="margin-left:auto">Données</a>
+    <?php endif; ?>
     <span class="nav-user"><?= htmlspecialchars($_SESSION['user_name'] ?? '') ?></span>
     <a href="/auth/logout" class="nav-logout" title="Déconnexion">&#x2715;</a>
 </nav>
@@ -335,7 +340,7 @@
     </div>
 
     <!-- ═══ PANNEAU DROIT ════════════════════════════════════ -->
-    <aside id="panel-right" class="hidden">
+    <aside id="panel-right" class="panel-closed">
         <button id="close-right" title="Fermer">✕</button>
         <div class="panel-right-head" id="info-title">Informations</div>
         <div id="info-content"></div>

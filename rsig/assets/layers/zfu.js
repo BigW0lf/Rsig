@@ -15,7 +15,7 @@ export function loadZfu(map) {
         .then(r => r.json())
         .then(fc => {
             hideSpinner();
-            if (!fc?.features?.length) return;
+            if (!active || !fc?.features?.length) return;
 
             map.addSource('zfu-src', { type: 'geojson', data: fc });
             map.addLayer({ id: 'zfu-fill', type: 'fill', source: 'zfu-src',

@@ -5,7 +5,8 @@ import { showInfo, clearInfo, irow } from '../panel.js';
 let active = false;
 let abortCtrl = null;
 let loadId = 0;
-const deptCache = {};
+const deptCache   = {};
+const breaksCache = {};
 
 const DEPT_ZOOM = 9;
 
@@ -87,15 +88,20 @@ export function loadTf(map) {
     const level = zoom < DEPT_ZOOM ? 'dept' : 'commune';
     const myId  = ++loadId;
 
+    const bKey = cacheKey(cat, annee);
     const render = (fc, renderLevel) => {
-        if (myId !== loadId) return;
+        if (myId !== loadId || !active) return;
         if (!fc?.features?.length) {
             if (map.getSource('tf-src'))
                 map.getSource('tf-src').setData({ type: 'FeatureCollection', features: [] });
             return;
         }
-        const values = fc.features.map(f => +f.properties.tf_estime);
-        const breaks = quantileBreaks(values, 6);
+        // Breaks stables : calculés une fois par cat+annee, jamais recalculés sur un pan
+        if (!breaksCache[bKey]) {
+            const values = fc.features.map(f => +f.properties.tf_estime);
+            breaksCache[bKey] = quantileBreaks(values, 6);
+        }
+        const breaks = breaksCache[bKey];
         if (!breaks) return;
         upsert(map, fc, stepExpr('tf_estime', breaks, PAL.cfe));
         const niveauLabel = renderLevel === 'dept' ? 'moy. par département' : 'communes';
@@ -123,13 +129,14 @@ export function initTf(map) {
 
     function onOptionChange() {
         Object.keys(deptCache).forEach(k => delete deptCache[k]);
+        Object.keys(breaksCache).forEach(k => delete breaksCache[k]);
         if (active) loadTf(map);
     }
 
     toggle.addEventListener('change', () => {
         active = toggle.checked;
         options.classList.toggle('hidden', !active);
-        if (!active) { remove(map); dropLegend('tf'); clearInfo('tf'); }
+        if (!active) { if (abortCtrl) abortCtrl.abort(); remove(map); dropLegend('tf'); clearInfo('tf'); }
         else loadTf(map);
     });
 

@@ -16,6 +16,7 @@ const LABELS = {
 let active   = false;
 let loaded   = false;
 let fcCache  = null;
+let ctrl     = null;
 
 const millesimesReady = fetch('/api/tass/millesimes').then(r => r.json()).catch(() => [2026]);
 const tarifsCache = {};
@@ -38,7 +39,7 @@ function load(map) {
 
     const doRender = (fc) => {
         hideSpinner();
-        if (!fc?.features?.length) return;
+        if (!active || !fc?.features?.length) return;
 
         const colorExpr = ['match', ['get', 'circonscription'],
             1, PALETTE[1].fill,
@@ -71,10 +72,12 @@ function load(map) {
 
     if (fcCache) { doRender(fcCache); return; }
 
-    fetch('/api/tass')
+    if (ctrl) ctrl.abort();
+    ctrl = new AbortController();
+    fetch('/api/tass', { signal: ctrl.signal })
         .then(r => r.json())
         .then(fc => { fcCache = fc; doRender(fc); })
-        .catch(e => { hideSpinner(); console.error('tass', e); });
+        .catch(e => { hideSpinner(); if (e.name !== 'AbortError') console.error('tass', e); });
 }
 
 function remove(map) {

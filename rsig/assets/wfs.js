@@ -29,6 +29,10 @@ export function getWfsType(zoom) {
     return 'parcelles';
 }
 
+// Seuil minimal de déplacement pour déclencher un rechargement WFS (en degrés)
+// Évite les requêtes inutiles sur les micro-pans
+const MIN_DELTA = { departements: 999, communes: 0.1, sections: 0.04, parcelles: 0.01 };
+
 export function updateWfs(map) {
     const zoom = map.getZoom();
     const type = getWfsType(zoom);
@@ -39,7 +43,14 @@ export function updateWfs(map) {
         if (lastType === 'departements') return;
         lastBbox = null;
     } else {
-        if (type === lastType && bbox === lastBbox) return;
+        if (type === lastType && lastBbox) {
+            // Comparer les centres — ne recharger que si déplacement > seuil
+            const prev = lastBbox.split(',').map(Number);
+            const cur  = bbox.split(',').map(Number);
+            const dLng = Math.abs(((prev[0] + prev[2]) / 2) - ((cur[0] + cur[2]) / 2));
+            const dLat = Math.abs(((prev[1] + prev[3]) / 2) - ((cur[1] + cur[3]) / 2));
+            if (dLng < MIN_DELTA[type] && dLat < MIN_DELTA[type]) return;
+        }
     }
     lastType = type;
     lastBbox = bbox;

@@ -74,7 +74,7 @@ export function loadTarifs(map) {
     getBreaks(cat, annee, globalB => {
         if (myId !== loadId) return;
         const render = (fc, renderLevel) => {
-            if (myId !== loadId) return;
+            if (myId !== loadId || !active) return;
             if (getLevel(map.getZoom()) !== renderLevel) return;
             if (!fc?.features?.length) {
                 if (map.getSource('tarifs-src')) map.getSource('tarifs-src').setData({ type: 'FeatureCollection', features: [] });
@@ -118,7 +118,7 @@ export function initTarifs(map, catsReady) {
     toggle.addEventListener('change', () => {
         active = toggle.checked;
         options.classList.toggle('hidden', !active);
-        if (!active) { remove(map); dropLegend('tarifs'); clearInfo('tarifs'); }
+        if (!active) { if (abortCtrl) abortCtrl.abort(); remove(map); dropLegend('tarifs'); clearInfo('tarifs'); }
         else loadTarifs(map);
     });
     catEl.addEventListener('change',   () => { clearInfo('tarifs'); loadTarifs(map); });

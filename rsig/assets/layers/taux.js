@@ -81,7 +81,7 @@ export function loadTaux(map) {
     getBreaks(champ, millesime, globalB => {
         if (myId !== loadId) return;
         const render = (fc, renderLevel) => {
-            if (myId !== loadId) return;
+            if (myId !== loadId || !active) return;
             if (getLevel(map.getZoom()) !== renderLevel) return;
             if (!fc?.features?.length) {
                 if (map.getSource('taux-src')) map.getSource('taux-src').setData({ type: 'FeatureCollection', features: [] });
@@ -121,7 +121,7 @@ export function initTaux(map) {
     toggle.addEventListener('change', () => {
         active = toggle.checked;
         options.classList.toggle('hidden', !active);
-        if (!active) { remove(map); dropLegend('taux'); clearInfo('taux'); }
+        if (!active) { if (abortCtrl) abortCtrl.abort(); remove(map); dropLegend('taux'); clearInfo('taux'); }
         else loadTaux(map);
     });
     champEl.addEventListener('change', () => { clearInfo('taux'); loadTaux(map); });
