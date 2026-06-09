@@ -76,13 +76,14 @@ if ($db) {
         ");
         $lastVisits = $stmt->fetchAll();
 
-        // Couches les plus activées (JSON array dans layers_used)
+        // Couches les plus activées (layers_used est TEXT, pas JSON)
         $stmt = $db->query("
             SELECT layer_name, COUNT(*) AS cnt
             FROM site_visits,
                  json_array_elements_text(
-                     CASE WHEN layers_used IS NULL OR layers_used::text = 'null' THEN '[]'::json
-                          ELSE layers_used END
+                     CASE WHEN layers_used IS NULL OR layers_used = 'null' OR layers_used = ''
+                          THEN '[]'::json
+                          ELSE layers_used::json END
                  ) AS layer_name
             GROUP BY layer_name
             ORDER BY cnt DESC
