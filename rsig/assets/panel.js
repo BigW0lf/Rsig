@@ -1,5 +1,14 @@
 const panelRight = document.getElementById('panel-right');
-document.getElementById('close-right').addEventListener('click', () => panelRight.classList.add('panel-closed'));
+const _legendEl  = document.getElementById('legend');
+
+function _syncLegendShift() {
+    _legendEl?.classList.toggle('legend-shifted', !panelRight.classList.contains('panel-closed'));
+}
+
+document.getElementById('close-right').addEventListener('click', () => {
+    panelRight.classList.add('panel-closed');
+    _syncLegendShift();
+});
 
 // Sections par couche affichées dans le panneau
 const _sections = {};
@@ -22,11 +31,13 @@ export function showInfo(layerKey, title, html) {
     _sections[layerKey] = { title, html };
     _renderPanel();
     panelRight.scrollTop = 0;
+    _syncLegendShift();
 }
 
 export function clearInfo(layerKey) {
     delete _sections[layerKey];
     _renderPanel();
+    _syncLegendShift();
 }
 
 function _esc(v) {

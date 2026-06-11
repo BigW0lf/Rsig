@@ -22,8 +22,8 @@ export function loadDossiers(map) {
             const displayFc = filter ? filter.applyFilters(fc) : fc;
 
             const tfVals = fc.features.map(f => +f.properties.montant_tf).filter(v => isFinite(v) && v > 0);
-            const breaks = computeBreaks(tfVals, 5);
-            const color  = stepExpr('montant_tf', breaks, PAL.tf, '#94a3b8');
+            const breaks = tfVals.length ? computeBreaks(tfVals, 5) : null;
+            const color  = breaks ? stepExpr('montant_tf', breaks, PAL.tf, '#94a3b8') : '#94a3b8';
 
             map.addSource('dossiers-src', { type: 'geojson', data: displayFc, cluster: true, clusterRadius: 40 });
             map.addLayer({ id: 'dossiers-circle', type: 'circle', source: 'dossiers-src',
@@ -43,7 +43,7 @@ export function loadDossiers(map) {
 
             loaded = true;
             bddOnTop(map);
-            saveLegend('dossiers', 'Taxe foncière (€)', breaks, PAL.tf, ' €');
+            if (breaks) saveLegend('dossiers', 'Taxe foncière (€)', breaks, PAL.tf, ' €');
 
             map.on('mouseenter', 'dossiers-circle',  () => map.getCanvas().style.cursor = 'pointer');
             map.on('mouseleave', 'dossiers-circle',  () => map.getCanvas().style.cursor = '');
