@@ -1,170 +1,160 @@
-import { showSpinner, hideSpinner, computeBreaks, bddOnTop } from '../utils.js';
+import { showSpinner, hideSpinner, bddOnTop } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 
-// Seuil zoom : en dessous clusters/points, au-dessus polygones hachurés
-const ZOOM_POLY = 12;
+const ZOOM_POLY  = 12;   // en dessous → clusters, au-dessus → polygones hachurés
 
-// Palette rouge par palier de taux
-const PALETTE   = ['#fde047', '#fb923c', '#f97316', '#dc2626', '#7f1d1d'];
-const BREAKS    = [5, 7, 10, 15, 20];   // bornes fixes (taux %)
+const PALETTE = ['#fde047', '#fb923c', '#f97316', '#dc2626', '#7f1d1d'];
+const BREAKS  = [5, 7, 10, 15, 20];
 
 let active    = false;
-let loaded    = false;
 let abortCtrl = null;
 
-// ── Hachures (repris du style coeff_loc) ─────────────────
+// ── Hachures ─────────────────────────────────────────────────
 function makeHatchImage(color) {
-    const size = 10;
-    const canvas = document.createElement('canvas');
-    canvas.width = size; canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, size, size);
+    const sz = 10;
+    const c  = document.createElement('canvas');
+    c.width = sz; c.height = sz;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, sz, sz);
     ctx.strokeStyle = color; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(-1, size + 1); ctx.lineTo(size + 1, -1); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-1, 1);         ctx.lineTo(1, -1);         ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(size - 1, size + 1); ctx.lineTo(size + 1, size - 1); ctx.stroke();
-    const d = ctx.getImageData(0, 0, size, size);
-    return { width: size, height: size, data: d.data };
+    ctx.beginPath(); ctx.moveTo(-1, sz+1); ctx.lineTo(sz+1, -1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-1, 1);    ctx.lineTo(1, -1);    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sz-1, sz+1); ctx.lineTo(sz+1, sz-1); ctx.stroke();
+    const d = ctx.getImageData(0, 0, sz, sz);
+    return { width: sz, height: sz, data: d.data };
 }
 
 function ensureHatch(map, color, key) {
     if (!map.hasImage(key)) map.addImage(key, makeHatchImage(color), { pixelRatio: 2 });
 }
 
-function colorForTaux(t) {
-    const n = +t;
-    if (n >= 20) return PALETTE[4];
-    if (n >= 15) return PALETTE[3];
-    if (n >= 10) return PALETTE[2];
-    if (n >=  7) return PALETTE[1];
-    return PALETTE[0];
+// ── Calcul des centroïdes côté JS pour la source cluster ─────
+function centroidsFromFeatures(features) {
+    return features.map(f => {
+        const g = f.geometry;
+        let pt;
+        if (g.type === 'Point') {
+            pt = g.coordinates;
+        } else {
+            // centroïde naïf : moyenne des coordonnées du premier anneau
+            const coords = g.type === 'Polygon' ? g.coordinates[0]
+                         : g.type === 'MultiPolygon' ? g.coordinates[0][0]
+                         : [[0,0]];
+            const n = coords.length;
+            pt = [coords.reduce((s,c)=>s+c[0],0)/n, coords.reduce((s,c)=>s+c[1],0)/n];
+        }
+        return { type:'Feature', geometry:{type:'Point',coordinates:pt}, properties: f.properties };
+    });
 }
 
-// ── Gestion des sources/layers ────────────────────────────
-const HATCH_PREFIX = 'ta-maj-hatch';
-const N_HATCH = PALETTE.length;
-
-function clearHatch(map) {
-    for (let i = 0; i < N_HATCH; i++) {
-        if (map.getLayer(`${HATCH_PREFIX}-${i}`)) map.removeLayer(`${HATCH_PREFIX}-${i}`);
-        if (map.getSource(`${HATCH_PREFIX}-src-${i}`)) map.removeSource(`${HATCH_PREFIX}-src-${i}`);
-    }
-}
-
-function remove(map) {
-    clearHatch(map);
-    ['ta-maj-fill', 'ta-maj-line',
-     'ta-maj-cluster', 'ta-maj-cluster-count', 'ta-maj-point']
-        .forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
-    ['ta-maj-poly', 'ta-maj-pts']
-        .forEach(id => { if (map.getSource(id)) map.removeSource(id); });
-}
-
-function buildPolygons(map, polys) {
-    if (!polys?.features?.length) return;
-
-    // Source polygones
+// ── Build / update layers ─────────────────────────────────────
+function buildLayers(map, fc) {
+    // ─ Source polygones ─
     if (map.getSource('ta-maj-poly')) {
-        map.getSource('ta-maj-poly').setData(polys);
-        // Mettre à jour les hachures
-        clearHatch(map);
+        map.getSource('ta-maj-poly').setData(fc);
     } else {
-        map.addSource('ta-maj-poly', { type: 'geojson', data: polys });
-        // Couche de base transparente (pour clic et hover)
+        map.addSource('ta-maj-poly', { type: 'geojson', data: fc });
+
+        // Fond semi-transparent
         map.addLayer({ id: 'ta-maj-fill', type: 'fill', source: 'ta-maj-poly',
             minzoom: ZOOM_POLY,
             paint: { 'fill-color': ['step', ['get','taux'],
                 PALETTE[0], 7, PALETTE[1], 10, PALETTE[2], 15, PALETTE[3], 20, PALETTE[4]],
-                'fill-opacity': 0.15 }   // fond très léger, hachures apportent la couleur
+                'fill-opacity': 0.15 },
         });
         map.addLayer({ id: 'ta-maj-line', type: 'line', source: 'ta-maj-poly',
             minzoom: ZOOM_POLY,
-            paint: { 'line-color': '#7f1d1d', 'line-width': 1.2 }
+            paint: { 'line-color': '#7f1d1d', 'line-width': 1.2 },
+        });
+
+        // Hachures par palier (filter MapLibre au lieu de sources multiples)
+        PALETTE.forEach((col, i) => {
+            const lo = BREAKS[i];
+            const hi = BREAKS[i+1] ?? Infinity;
+            const imgKey = `ta-maj-img-${col.replace('#','')}`;
+            ensureHatch(map, col, imgKey);
+            const filter = i === PALETTE.length - 1
+                ? ['>=', ['get','taux'], lo]
+                : ['all', ['>=', ['get','taux'], lo], ['<', ['get','taux'], hi]];
+            map.addLayer({ id: `ta-maj-hatch-${i}`, type: 'fill', source: 'ta-maj-poly',
+                minzoom: ZOOM_POLY,
+                filter,
+                paint: { 'fill-pattern': imgKey },
+            });
         });
     }
 
-    // Hachures par palier de taux
-    PALETTE.forEach((col, i) => {
-        const lo = BREAKS[i];
-        const hi = BREAKS[i + 1] ?? Infinity;
-        const feats = polys.features.filter(f => {
-            const v = +f.properties.taux;
-            return i === PALETTE.length - 1 ? v >= lo : (v >= lo && v < hi);
+    // ─ Source clusters (centroïdes recalculés) ─
+    const pts = { type:'FeatureCollection', features: centroidsFromFeatures(fc.features) };
+    if (map.getSource('ta-maj-pts')) {
+        map.getSource('ta-maj-pts').setData(pts);
+    } else {
+        map.addSource('ta-maj-pts', {
+            type: 'geojson', data: pts,
+            cluster: true, clusterMaxZoom: ZOOM_POLY - 1, clusterRadius: 40,
         });
-        if (!feats.length) return;
-        const imgKey = `ta-maj-img-${col.replace('#', '')}`;
-        ensureHatch(map, col, imgKey);
-        const srcId = `${HATCH_PREFIX}-src-${i}`;
-        map.addSource(srcId, { type: 'geojson', data: { type: 'FeatureCollection', features: feats } });
-        map.addLayer({ id: `${HATCH_PREFIX}-${i}`, type: 'fill', source: srcId,
-            minzoom: ZOOM_POLY,
-            paint: { 'fill-pattern': imgKey }
+
+        map.addLayer({ id: 'ta-maj-cluster', type: 'circle', source: 'ta-maj-pts',
+            maxzoom: ZOOM_POLY,
+            filter: ['has', 'point_count'],
+            paint: {
+                'circle-color': ['step', ['get','point_count'],
+                    '#f97316', 10, '#dc2626', 50, '#7f1d1d'],
+                'circle-radius': ['step', ['get','point_count'], 16, 10, 22, 50, 28],
+                'circle-opacity': 0.85,
+            },
         });
-    });
+        map.addLayer({ id: 'ta-maj-cluster-count', type: 'symbol', source: 'ta-maj-pts',
+            maxzoom: ZOOM_POLY,
+            filter: ['has', 'point_count'],
+            layout: { 'text-field': '{point_count_abbreviated}', 'text-size': 12,
+                      'text-font': ['Noto Sans Regular'] },
+            paint: { 'text-color': '#fff', 'text-halo-color': '#7f1d1d', 'text-halo-width': 1 },
+        });
+        map.addLayer({ id: 'ta-maj-point', type: 'circle', source: 'ta-maj-pts',
+            maxzoom: ZOOM_POLY,
+            filter: ['!', ['has', 'point_count']],
+            paint: {
+                'circle-color': ['step', ['get','taux'],
+                    PALETTE[0], 7, PALETTE[1], 10, PALETTE[2], 15, PALETTE[3], 20, PALETTE[4]],
+                'circle-radius': 7,
+                'circle-stroke-width': 1.5, 'circle-stroke-color': '#7f1d1d',
+            },
+        });
+
+        map.on('click', 'ta-maj-cluster', e => {
+            const f = map.queryRenderedFeatures(e.point, { layers: ['ta-maj-cluster'] })[0];
+            map.getSource('ta-maj-pts').getClusterExpansionZoom(f.properties.cluster_id, (err, zoom) => {
+                if (!err) map.easeTo({ center: f.geometry.coordinates, zoom });
+            });
+        });
+        map.on('mouseenter', 'ta-maj-cluster', () => map.getCanvas().style.cursor = 'pointer');
+        map.on('mouseleave', 'ta-maj-cluster', () => map.getCanvas().style.cursor = '');
+    }
 
     bddOnTop(map);
 }
 
-function buildClusters(map, points) {
-    if (!points?.features?.length) return;
-
-    if (map.getSource('ta-maj-pts')) {
-        map.getSource('ta-maj-pts').setData(points);
-        return;
+function removeLayers(map) {
+    for (let i = 0; i < PALETTE.length; i++) {
+        if (map.getLayer(`ta-maj-hatch-${i}`)) map.removeLayer(`ta-maj-hatch-${i}`);
     }
-
-    map.addSource('ta-maj-pts', {
-        type: 'geojson', data: points,
-        cluster: true, clusterMaxZoom: ZOOM_POLY - 1, clusterRadius: 40,
-    });
-
-    map.addLayer({ id: 'ta-maj-cluster', type: 'circle', source: 'ta-maj-pts',
-        maxzoom: ZOOM_POLY,
-        filter: ['has', 'point_count'],
-        paint: {
-            'circle-color': ['step', ['get','point_count'],
-                '#f97316', 10, '#dc2626', 50, '#7f1d1d'],
-            'circle-radius': ['step', ['get','point_count'], 16, 10, 22, 50, 28],
-            'circle-opacity': 0.85,
-        }
-    });
-    map.addLayer({ id: 'ta-maj-cluster-count', type: 'symbol', source: 'ta-maj-pts',
-        maxzoom: ZOOM_POLY,
-        filter: ['has', 'point_count'],
-        layout: { 'text-field': '{point_count_abbreviated}', 'text-size': 12,
-                  'text-font': ['Noto Sans Regular'] },
-        paint: { 'text-color': '#fff', 'text-halo-color': '#7f1d1d', 'text-halo-width': 1 }
-    });
-    map.addLayer({ id: 'ta-maj-point', type: 'circle', source: 'ta-maj-pts',
-        maxzoom: ZOOM_POLY,
-        filter: ['!', ['has', 'point_count']],
-        paint: {
-            'circle-color': ['step', ['get','taux'],
-                PALETTE[0], 7, PALETTE[1], 10, PALETTE[2], 15, PALETTE[3], 20, PALETTE[4]],
-            'circle-radius': 7, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#7f1d1d',
-        }
-    });
-
-    // Clic cluster → zoom
-    map.on('click', 'ta-maj-cluster', e => {
-        const f = map.queryRenderedFeatures(e.point, { layers: ['ta-maj-cluster'] })[0];
-        map.getSource('ta-maj-pts').getClusterExpansionZoom(f.properties.cluster_id, (err, zoom) => {
-            if (!err) map.easeTo({ center: f.geometry.coordinates, zoom });
-        });
-    });
-    map.on('mouseenter', 'ta-maj-cluster', () => map.getCanvas().style.cursor = 'pointer');
-    map.on('mouseleave', 'ta-maj-cluster', () => map.getCanvas().style.cursor = '');
+    ['ta-maj-fill','ta-maj-line',
+     'ta-maj-cluster','ta-maj-cluster-count','ta-maj-point']
+        .forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
+    ['ta-maj-poly','ta-maj-pts']
+        .forEach(id => { if (map.getSource(id)) map.removeSource(id); });
 }
 
-// ── Chargement principal ──────────────────────────────────
-function getMillesime() {
-    return document.getElementById('ta-majore-millesime')?.value || '';
-}
-
+// ── Chargement ────────────────────────────────────────────────
 function bboxParam(map) {
     const b = map.getBounds();
     return `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
+}
+
+function getMil() {
+    return document.getElementById('ta-majore-millesime')?.value || '';
 }
 
 function load(map) {
@@ -173,56 +163,59 @@ function load(map) {
     abortCtrl = new AbortController();
     showSpinner();
 
-    const mil = getMillesime();
-    const url = `/api/ta/majore${mil ? '?millesime=' + mil : ''}`;
+    const mil = getMil();
+    const url = `/api/ta/majore?bbox=${bboxParam(map)}${mil ? '&millesime='+mil : ''}`;
 
     fetch(url, { signal: abortCtrl.signal })
         .then(r => r.json())
-        .then(data => {
+        .then(fc => {
             hideSpinner();
             if (!active) return;
-            const polys  = data.polygons;
-            const points = data.points;
-            if (!polys?.features?.length) return;
+            const empty = { type:'FeatureCollection', features:[] };
 
-            buildClusters(map, points);
-            buildPolygons(map, polys);
-            loaded = true;
+            if (!fc?.features?.length) {
+                if (map.getSource('ta-maj-poly')) map.getSource('ta-maj-poly').setData(empty);
+                if (map.getSource('ta-maj-pts'))  map.getSource('ta-maj-pts').setData(empty);
+                return;
+            }
+
+            if (fc.mode === 'points') {
+                // Grande bbox : on reçoit des centroïdes commune → clusters uniquement, pas de polys
+                buildLayers(map, empty);          // crée les sources/layers si besoin
+                map.getSource('ta-maj-poly').setData(empty);
+                map.getSource('ta-maj-pts').setData(fc);
+            } else {
+                // Petite bbox : polygones complets + centroïdes calculés JS
+                buildLayers(map, fc);
+            }
 
             const mil_label = mil ? ` (${mil})` : ' (dernier en vigueur)';
             saveLegend('ta-majore',
                 `TA majorée >5%${mil_label}`,
-                ['5–7 %', '7–10 %', '10–15 %', '15–20 %', '≥ 20 %'],
+                ['5–7 %','7–10 %','10–15 %','15–20 %','≥ 20 %'],
                 PALETTE, '');
         })
         .catch(e => { hideSpinner(); if (e.name !== 'AbortError') console.error('ta-majore', e); });
 }
 
-// ── Info panneau ─────────────────────────────────────────
+// ── Info panneau ─────────────────────────────────────────────
 function showMajoreInfo(p) {
-    const typeZone = p.parcelle ? 'Parcelle' : 'Section cadastrale';
-    const ref = p.parcelle
-        ? `${p.prefixe || ''}${p.section} n°${p.parcelle}`
-        : `${p.prefixe || ''}${p.section}`;
-    showInfo('ta-majore', `TA majorée — ${p.libcom || p.code_insee}`,
-        irow('Type de zone', typeZone) +
-        irow('Référence', ref) +
-        irow('Taux communal', (+p.taux).toFixed(2) + ' %') +
-        irow('Millésime', p.millesime || '–') +
-        irow('Date délibération', p.date_effet || '–') +
-        irow('Code INSEE', p.code_insee) +
-        `<div class="info-row" style="margin-top:4px;font-size:0.75rem;color:var(--text3)">
-            Taux >5% voté par délibération municipale
-        </div>`
+    const typeLabel = p.type_zone === 'parcelle' ? 'Parcelle' : 'Section cadastrale';
+    const ref = p.type_zone === 'parcelle'
+        ? `Sect. ${p.section} · Parc. ${p.parcelle}`
+        : `Sect. ${p.section}`;
+    showInfo('ta-majore', `TA majorée — ${p.libcom || p.code_insee} · ${ref} — ${p.millesime || ''}`,
+        irow('Type de zone', typeLabel) +
+        irow('Taux', (+p.taux).toFixed(2) + ' %') +
+        irow('Date délibération', p.date_effet || null)
     );
 }
 
-// ── Init ─────────────────────────────────────────────────
+// ── Init ─────────────────────────────────────────────────────
 export function initTaMajore(map) {
     const toggle = document.getElementById('toggle-ta-majore');
     const milSel = document.getElementById('ta-majore-millesime');
 
-    // Sélecteur millésime
     fetch('/api/ta/majore/millesimes').then(r => r.json()).then(mils => {
         if (!milSel) return;
         const opt0 = document.createElement('option');
@@ -235,30 +228,24 @@ export function initTaMajore(map) {
         });
     }).catch(() => {});
 
-    milSel?.addEventListener('change', () => {
-        if (active) { remove(map); loaded = false; load(map); }
-    });
+    milSel?.addEventListener('change', () => { if (active) load(map); });
 
-    // Clics
-    ['ta-maj-fill', 'ta-maj-poly'].forEach(id => {
-        map.on('click', id, e => { if (e.features?.[0]) showMajoreInfo(e.features[0].properties); });
+    // Clics polygones
+    ['ta-maj-fill', ...Array.from({length:PALETTE.length},(_,i)=>`ta-maj-hatch-${i}`)].forEach(id => {
+        map.on('click', id, e => { if (!active || !e.features?.[0]) return; showMajoreInfo(e.features[0].properties); });
+        map.on('mouseenter', id, () => map.getCanvas().style.cursor = 'pointer');
+        map.on('mouseleave', id, () => map.getCanvas().style.cursor = '');
     });
-    for (let i = 0; i < N_HATCH; i++) {
-        map.on('click', `${HATCH_PREFIX}-${i}`, e => { if (e.features?.[0]) showMajoreInfo(e.features[0].properties); });
-    }
-    map.on('click', 'ta-maj-point', e => { if (e.features?.[0]) showMajoreInfo(e.features[0].properties); });
-
-    map.on('mouseenter', 'ta-maj-fill',  () => map.getCanvas().style.cursor = 'pointer');
-    map.on('mouseleave', 'ta-maj-fill',  () => map.getCanvas().style.cursor = '');
+    map.on('click', 'ta-maj-point', e => { if (!active || !e.features?.[0]) return; showMajoreInfo(e.features[0].properties); });
     map.on('mouseenter', 'ta-maj-point', () => map.getCanvas().style.cursor = 'pointer');
     map.on('mouseleave', 'ta-maj-point', () => map.getCanvas().style.cursor = '');
 
     toggle?.addEventListener('change', () => {
         active = toggle.checked;
         document.getElementById('ta-majore-options')?.classList.toggle('hidden', !active);
-        if (!active) { remove(map); loaded = false; dropLegend('ta-majore'); clearInfo('ta-majore'); }
-        else if (!loaded) load(map);
+        if (!active) { if (abortCtrl) abortCtrl.abort(); removeLayers(map); dropLegend('ta-majore'); clearInfo('ta-majore'); }
+        else load(map);
     });
 
-    return { isActive: () => active };
+    return { load: () => load(map), isActive: () => active };
 }

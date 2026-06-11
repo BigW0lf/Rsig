@@ -37,6 +37,7 @@ export function initZfu(map) {
     const toggle = document.getElementById('toggle-zfu');
 
     map.on('click', 'zfu-fill', e => {
+        if (!active) return;
         const p = e.features[0].properties;
         showInfo('zfu', `ZFU — ${p.nom_quartier}`,
             irow('Code quartier', p.codquart) +

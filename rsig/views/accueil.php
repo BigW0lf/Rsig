@@ -216,6 +216,9 @@
                         <option value="2022">2022</option>
                     </select>
                 </label>
+                <label>Millésime zones majorées
+                    <select id="ta-millesime-union"></select>
+                </label>
             </div>
         </div>
 

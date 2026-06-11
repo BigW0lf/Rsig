@@ -5,8 +5,7 @@ import { showInfo, clearInfo, irow } from '../panel.js';
 let active    = false;
 let abortCtrl = null;
 let loadId    = 0;
-const cache        = {};
-const globalBreaks = {};
+const cache = {};
 
 const DEPT_ZOOM    = 9;
 const COMMUNE_ZOOM = 13;
@@ -24,15 +23,6 @@ function fetchLayer(url, onData) {
         .then(r => r.json())
         .then(d => { hideSpinner(); onData(d); })
         .catch(e => { hideSpinner(); if (e.name !== 'AbortError') console.error('tarifs', e); });
-}
-
-function getBreaks(cat, annee, cb) {
-    const key = `${cat}|${annee}`;
-    if (globalBreaks[key]) { cb(globalBreaks[key]); return; }
-    fetch(`/api/tarifs/stats?categorie=${cat}&annee=${annee}`)
-        .then(r => r.json())
-        .then(b => { globalBreaks[key] = b; cb(b); })
-        .catch(() => cb(null));
 }
 
 function getLevel(zoom) {
@@ -71,36 +61,33 @@ export function loadTarifs(map) {
     const level  = getLevel(map.getZoom());
     const myId   = ++loadId;
 
-    getBreaks(cat, annee, globalB => {
-        if (myId !== loadId) return;
-        const render = (fc, renderLevel) => {
-            if (myId !== loadId || !active) return;
-            if (getLevel(map.getZoom()) !== renderLevel) return;
-            if (!fc?.features?.length) {
-                if (map.getSource('tarifs-src')) map.getSource('tarifs-src').setData({ type: 'FeatureCollection', features: [] });
-                return;
-            }
-            const breaks      = globalB ?? computeBreaks(fc.features.map(f => +f.properties.valeur).filter(v => isFinite(v)), 7);
-            const niveauLabel = { dept: 'départements', commune: 'communes', section: 'sections' }[renderLevel];
-            const title       = renderLevel === 'section'
-                ? `${cat} — ${annee} (${niveauLabel})`
-                : `${cat} — ${annee} — moy. par ${niveauLabel.slice(0,-1)}`;
-            upsert(map, fc, stepExpr('valeur', breaks, PAL.tarifs));
-            saveLegend('tarifs', title, breaks, PAL.tarifs, ' €/m²');
-        };
-
-        if (level === 'dept') {
-            const key = `${cat}|${annee}|dept`;
-            if (cache[key]) { render(cache[key], 'dept'); return; }
-            fetchLayer(`/api/tarifs/departements?categorie=${cat}&annee=${annee}`, fc => { cache[key] = fc; render(fc, 'dept'); });
+    const render = (fc, renderLevel) => {
+        if (myId !== loadId || !active) return;
+        if (getLevel(map.getZoom()) !== renderLevel) return;
+        if (!fc?.features?.length) {
+            if (map.getSource('tarifs-src')) map.getSource('tarifs-src').setData({ type: 'FeatureCollection', features: [] });
             return;
         }
+        const breaks      = computeBreaks(fc.features.map(f => +f.properties.valeur).filter(v => isFinite(v) && v > 0), 7);
+        const niveauLabel = { dept: 'départements', commune: 'communes', section: 'sections' }[renderLevel];
+        const title       = renderLevel === 'section'
+            ? `${cat} — ${annee} (${niveauLabel})`
+            : `${cat} — ${annee} — moy. par ${niveauLabel.slice(0,-1)}`;
+        upsert(map, fc, stepExpr('valeur', breaks, PAL.tarifs));
+        saveLegend('tarifs', title, breaks, PAL.tarifs, ' €/m²');
+    };
 
-        const url = level === 'commune'
-            ? `/api/tarifs/communes?bbox=${bboxParam(map)}&categorie=${cat}&annee=${annee}`
-            : `/api/tarifs?bbox=${bboxParam(map)}&categorie=${cat}&annee=${annee}`;
-        fetchLayer(url, fc => render(fc, level));
-    });
+    if (level === 'dept') {
+        const key = `${cat}|${annee}|dept`;
+        if (cache[key]) { render(cache[key], 'dept'); return; }
+        fetchLayer(`/api/tarifs/departements?categorie=${cat}&annee=${annee}`, fc => { cache[key] = fc; render(fc, 'dept'); });
+        return;
+    }
+
+    const url = level === 'commune'
+        ? `/api/tarifs/communes?bbox=${bboxParam(map)}&categorie=${cat}&annee=${annee}`
+        : `/api/tarifs?bbox=${bboxParam(map)}&categorie=${cat}&annee=${annee}`;
+    fetchLayer(url, fc => render(fc, level));
 }
 
 export function initTarifs(map, catsReady) {
@@ -125,6 +112,7 @@ export function initTarifs(map, catsReady) {
     anneeEl.addEventListener('change', () => { clearInfo('tarifs'); loadTarifs(map); });
 
     map.on('click', 'tarifs-fill', e => {
+        if (!active) return;
         const p     = e.features[0].properties;
         const annee = anneeEl.value;
         if (p.section) {
@@ -133,23 +121,20 @@ export function initTarifs(map, catsReady) {
                 .filter(y => p[`val_${y}`] != null)
                 .map(y => `<tr><td>${y}</td><td>${esc(p['val_'+y])} €/m²</td></tr>`)
                 .join('');
-            showInfo('tarifs', `${p.nom_com} (${p.code_dep}) — Section ${p.section}`,
-                irow('INSEE', p.code_insee) +
-                irow('Secteur', p.secteur) +
+            showInfo('tarifs', `${p.nom_com} (${p.code_dep}) — Sect. ${p.section} / Secteur ${p.secteur}`,
                 irow('Catégorie', p.categorie) +
-                irow(`Tarif ${annee}`, p.valeur != null ? p.valeur+' €/m²' : '–') +
-                `<div class="info-row"><span class="info-label">Évolution</span></div>
-                <table class="evol-table"><tr><th>Année</th><th>Tarif</th></tr>${rows}</table>`
+                irow(`Tarif ${annee}`, p.valeur != null ? p.valeur+' €/m²' : null) +
+                (rows ? `<div class="info-row"><span class="info-label">Évolution</span></div>
+                <table class="evol-table"><tr><th>Année</th><th>Tarif</th></tr>${rows}</table>` : '')
             );
         } else if (p.code_insee) {
             showInfo('tarifs', `${p.nom_com} (${p.code_dep})`,
-                irow('INSEE', p.code_insee) +
-                irow('Tarif moyen '+annee, p.valeur != null ? p.valeur+' €/m²' : '–') +
+                irow('Tarif moyen '+annee, p.valeur != null ? p.valeur+' €/m²' : null) +
                 `<div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez pour voir le détail par section</div>`
             );
         } else {
             showInfo('tarifs', `${p.nom_dep ?? 'Département'} (${p.code_dep})`,
-                irow('Tarif moyen '+annee, p.valeur != null ? p.valeur+' €/m²' : '–') +
+                irow('Tarif moyen '+annee, p.valeur != null ? p.valeur+' €/m²' : null) +
                 `<div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez pour voir le détail par commune ou section</div>`
             );
         }

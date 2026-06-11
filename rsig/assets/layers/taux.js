@@ -5,8 +5,7 @@ import { showInfo, clearInfo, irow } from '../panel.js';
 let active   = false;
 let abortCtrl = null;
 let loadId    = 0;
-const cache        = {};
-const globalBreaks = {};
+const cache = {};
 
 const DEPT_ZOOM = 9;
 
@@ -39,15 +38,6 @@ function fetchLayer(url, onData) {
         .catch(e => { hideSpinner(); if (e.name !== 'AbortError') console.error('taux', e); });
 }
 
-function getBreaks(champ, millesime, cb) {
-    const key = `${champ}|${millesime}`;
-    if (globalBreaks[key]) { cb(globalBreaks[key]); return; }
-    fetch(`/api/taux/stats?champ=${champ}&millesime=${millesime}`)
-        .then(r => r.json())
-        .then(b => { globalBreaks[key] = b; cb(b); })
-        .catch(() => cb(null));
-}
-
 function upsert(map, fc, color) {
     if (map.getLayer('taux-fill')) {
         map.getSource('taux-src').setData(fc);
@@ -78,30 +68,27 @@ export function loadTaux(map) {
     const level     = getLevel(map.getZoom());
     const myId      = ++loadId;
 
-    getBreaks(champ, millesime, globalB => {
-        if (myId !== loadId) return;
-        const render = (fc, renderLevel) => {
-            if (myId !== loadId || !active) return;
-            if (getLevel(map.getZoom()) !== renderLevel) return;
-            if (!fc?.features?.length) {
-                if (map.getSource('taux-src')) map.getSource('taux-src').setData({ type: 'FeatureCollection', features: [] });
-                return;
-            }
-            const breaks = globalB ?? computeBreaks(fc.features.map(f => +f.properties.valeur_affichee).filter(v => isFinite(v)), 5);
-            upsert(map, fc, stepExpr('valeur_affichee', breaks, PAL.taux));
-            const label       = CHAMP_LABELS[champ] ?? champ;
-            const niveauLabel = renderLevel === 'dept' ? 'moy. par département' : 'communes';
-            saveLegend('taux', `${label} ${millesime} — ${niveauLabel}`, breaks, PAL.taux, ' %');
-        };
-
-        if (level === 'dept') {
-            const key = `${champ}|${millesime}|dept`;
-            if (cache[key]) { render(cache[key], 'dept'); return; }
-            fetchLayer(`/api/taux/departements?champ=${champ}&millesime=${millesime}`, fc => { cache[key] = fc; render(fc, 'dept'); });
-        } else {
-            fetchLayer(`/api/taux?bbox=${bboxParam(map)}&champ=${champ}&millesime=${millesime}`, fc => render(fc, 'commune'));
+    const render = (fc, renderLevel) => {
+        if (myId !== loadId || !active) return;
+        if (getLevel(map.getZoom()) !== renderLevel) return;
+        if (!fc?.features?.length) {
+            if (map.getSource('taux-src')) map.getSource('taux-src').setData({ type: 'FeatureCollection', features: [] });
+            return;
         }
-    });
+        const breaks = computeBreaks(fc.features.map(f => +f.properties.valeur_affichee).filter(v => isFinite(v) && v > 0), 5);
+        upsert(map, fc, stepExpr('valeur_affichee', breaks, PAL.taux));
+        const label       = CHAMP_LABELS[champ] ?? champ;
+        const niveauLabel = renderLevel === 'dept' ? 'moy. par département' : 'communes';
+        saveLegend('taux', `${label} ${millesime} — ${niveauLabel}`, breaks, PAL.taux, ' %');
+    };
+
+    if (level === 'dept') {
+        const key = `${champ}|${millesime}|dept`;
+        if (cache[key]) { render(cache[key], 'dept'); return; }
+        fetchLayer(`/api/taux/departements?champ=${champ}&millesime=${millesime}`, fc => { cache[key] = fc; render(fc, 'dept'); });
+    } else {
+        fetchLayer(`/api/taux?bbox=${bboxParam(map)}&champ=${champ}&millesime=${millesime}`, fc => render(fc, 'commune'));
+    }
 }
 
 export function initTaux(map) {
@@ -132,6 +119,7 @@ export function initTaux(map) {
     });
 
     map.on('click', 'taux-fill', e => {
+        if (!active) return;
         const p     = e.features[0].properties;
         const v     = p.valeur_affichee;
         const label = CHAMP_LABELS[champEl.value] ?? champEl.value;
@@ -144,21 +132,21 @@ export function initTaux(map) {
                 `<div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 9 pour voir le détail par commune</div>`
             );
         } else {
-            showInfo('taux', `${p.libcom} (${p.dep})`,
-                irow('Millésime', p.millesime) +
+            const fmtNull = val => val != null ? (+val).toFixed(4) + ' %' : null;
+            showInfo('taux', `${p.libcom} (${p.dep}) — ${mil}`,
                 irow(label, fmt(v)) +
                 `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:11px;color:var(--text3)">Tous les taux</summary>
-                ${irow('TFPB Commune',    fmt(p.taux_fb_commune_vote))}
-                ${irow('TFPB Syndicat',  fmt(p.taux_fb_syndicats_net))}
-                ${irow('TFPB EPCI',      fmt(p.taux_fb_gfp_vote))}
-                ${irow('TFPB TSE',       fmt(p.taux_tse_net))}
-                ${irow('TFPB TASA',      fmt(p.taux_tafnb_commune_net))}
-                ${irow('TFPB TEOM',      fmt(p.taux_teom_plein))}
-                ${irow('TFPB GEMAPI',    fmt(p.taux_tse_gemapi_net))}
-                ${irow('TFPNB Commune',  fmt(p.taux_fnb_commune))}
-                ${irow('TFPNB Syndicat', fmt(p.taux_fnb_syndicats_net))}
-                ${irow('TFPNB EPCI',     fmt(p.taux_fnb_gfp_vote))}
-                ${irow('TFPNB TASA EPCI',fmt(p.taux_tafnb_gfp_net))}
+                ${irow('TFPB Commune',    fmtNull(p.taux_fb_commune_vote))}
+                ${irow('TFPB Syndicat',  fmtNull(p.taux_fb_syndicats_net))}
+                ${irow('TFPB EPCI',      fmtNull(p.taux_fb_gfp_vote))}
+                ${irow('TFPB TSE',       fmtNull(p.taux_tse_net))}
+                ${irow('TFPB TASA',      fmtNull(p.taux_tafnb_commune_net))}
+                ${irow('TFPB TEOM',      fmtNull(p.taux_teom_plein))}
+                ${irow('TFPB GEMAPI',    fmtNull(p.taux_tse_gemapi_net))}
+                ${irow('TFPNB Commune',  fmtNull(p.taux_fnb_commune))}
+                ${irow('TFPNB Syndicat', fmtNull(p.taux_fnb_syndicats_net))}
+                ${irow('TFPNB EPCI',     fmtNull(p.taux_fnb_gfp_vote))}
+                ${irow('TFPNB TASA EPCI',fmtNull(p.taux_tafnb_gfp_net))}
                 </details>`
             );
         }

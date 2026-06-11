@@ -126,6 +126,7 @@ map.on('load', () => {
         if (cfe.isActive())      cfe.load();
         if (tf.isActive())       tf.load();
         if (ta.isActive())       ta.load();
+        if (taMajore.isActive()) taMajore.load();
     }, 200));
 
     updateWfs(map);

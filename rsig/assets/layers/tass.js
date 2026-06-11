@@ -102,16 +102,14 @@ export function initTass(map) {
     map.on('mouseleave', 'tass-fill', () => map.getCanvas().style.cursor = '');
 
     map.on('click', 'tass-fill', e => {
+        if (!active) return;
         const p   = e.features[0].properties;
         const c   = +p.circonscription;
         const mil = +(getMillesime() || new Date().getFullYear());
         getTarifs(mil).then(tarifs => {
             const t = tarifs.find(r => +r.circonscription === c);
-            showInfo('tass', `TASS — ${p.libcom || p.code_insee}`,
-                irow('Circonscription', `${c} — ${LABELS[c] || ''}`) +
-                irow('Département', p.dep) +
-                irow('Code INSEE', p.code_insee) +
-                irow('Millésime', mil) +
+            showInfo('tass', `TASS — ${p.libcom || p.code_insee} (${p.dep}) — ${mil}`,
+                irow('Circonscription', `${c} — ${LABELS[c] || ''}`).replace('—  ', '') +
                 (t ? irow('Tarif TASS', (+t.tarif).toFixed(2) + ' €/m²') : '')
             );
         });

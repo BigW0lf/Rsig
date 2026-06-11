@@ -118,30 +118,24 @@ export function initSections(map) {
     });
 
     map.on('click', 'sections-fill', e => {
+        if (!active) return;
         const p = e.features[0].properties;
         if (p.section !== undefined) {
-            // niveau section — champ 'secteur'
-            showInfo('sections', `${p.nom_com} (${p.code_dep}) — Section ${p.section}`, `
-                ${irow('INSEE', p.code_insee)}
-                ${irow('Commune', p.nom_com)}
-                ${irow('Section', p.section)}
-                ${irow('Secteur', p.secteur ?? '–')}
-            `);
+            showInfo('sections', `${p.nom_com} (${p.code_dep}) — Section ${p.section}`,
+                irow('Secteur locatif', p.secteur != null ? p.secteur : null)
+            );
         } else if (p.code_insee) {
-            // niveau commune — champ 'secteur_dom'
-            showInfo('sections', `${p.nom_com} (${p.code_dep})`, `
-                ${irow('INSEE', p.code_insee)}
-                ${irow('Nb sections', p.nb_sections)}
-                ${irow('Secteur dominant', p.secteur_dom ?? '–')}
-                <div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 13 pour le détail par section</div>
-            `);
+            showInfo('sections', `${p.nom_com} (${p.code_dep})`,
+                irow('Nb sections', p.nb_sections) +
+                irow('Secteur dominant', p.secteur_dom != null ? p.secteur_dom : null) +
+                `<div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 13 pour le détail par section</div>`
+            );
         } else {
-            // niveau département
-            showInfo('sections', `${p.nom_dep ?? 'Département'} (${p.code_dep})`, `
-                ${irow('Nb communes', p.nb_communes)}
-                ${irow('Secteur dominant', p.secteur_dom ?? '–')}
-                <div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 9 pour le détail par commune</div>
-            `);
+            showInfo('sections', `${p.nom_dep ?? 'Département'} (${p.code_dep})`,
+                irow('Nb communes', p.nb_communes) +
+                irow('Secteur dominant', p.secteur_dom != null ? p.secteur_dom : null) +
+                `<div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 9 pour le détail par commune</div>`
+            );
         }
     });
 

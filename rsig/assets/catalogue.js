@@ -54,7 +54,7 @@ const CATALOGUE = [
         ],
     },
     {
-        group: 'IDF',
+        group: 'TS',
         layers: [
             { id: 'tsb-idf',  mapPrefix: 'tsb-idf',  label: 'TSB — Circ. IDF',         optionsId: 'tsb-idf-options',  desc: 'Taxe sur les surfaces de bureaux — Île-de-France' },
             { id: 'tsb-paca', mapPrefix: 'tsb-paca', label: 'TSB — PACA',               optionsId: 'tsb-paca-options', desc: 'Taxe sur les surfaces de bureaux — PACA' },

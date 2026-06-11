@@ -160,6 +160,7 @@ export function initTsb(map) {
 
     // Clic IDF
     map.on('click', 'tsb-idf-fill', e => {
+        if (!activeIdf) return;
         const p   = e.features[0].properties;
         const circ = +p.circonscription;
         const is2b = circ === 2 && !!p.dcsucs;
@@ -167,13 +168,10 @@ export function initTsb(map) {
         const mil  = +p.millesime;
 
         getTarifs(mil).then(tarifs => {
-            showInfo('tsb', `TSB IDF — ${p.libcom || p.code_insee}`,
+            showInfo('tsb', `TSB IDF — ${p.libcom || p.code_insee} (${p.dep}) — ${mil}`,
                 irow('Circonscription', `${circ}${is2b ? ' (DCSUCS)' : ''} — ${LABELS.IDF[circKey] || ''}`) +
                 (is2b ? irow('Régime tarifaire', 'Tarif réduit 10% (DCSUCS dep 92)') : '') +
                 (p.dcsucs && circ === 4 ? irow('Statut', 'DCSUCS — dérogation circ 4') : '') +
-                irow('Département', p.dep) +
-                irow('Code INSEE', p.code_insee) +
-                irow('Millésime', mil) +
                 renderTarifs(tarifs, 'IDF', circ, is2b)
             );
         });
@@ -181,15 +179,12 @@ export function initTsb(map) {
 
     // Clic PACA
     map.on('click', 'tsb-paca-fill', e => {
+        if (!activePaca) return;
         const p   = e.features[0].properties;
         const mil = +p.millesime;
 
         getTarifs(mil).then(tarifs => {
-            showInfo('tsb', `TSB PACA — ${p.libcom || p.code_insee}`,
-                irow('Région', 'PACA — Bouches-du-Rhône, Var, Alpes-Maritimes') +
-                irow('Département', p.dep) +
-                irow('Code INSEE', p.code_insee) +
-                irow('Millésime', mil) +
+            showInfo('tsb', `TSB PACA — ${p.libcom || p.code_insee} (${p.dep}) — ${mil}`,
                 renderTarifs(tarifs, 'PACA', null, false)
             );
         });

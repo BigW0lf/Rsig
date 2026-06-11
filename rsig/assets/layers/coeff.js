@@ -196,13 +196,13 @@ function showClusters(map, champ, globalB) {
                 });
             });
             map.on('click', 'coeff-cluster-circle', e => {
+                if (!active) return;
                 const p = e.features[0].properties;
-                showInfo('coeff', `Commune ${p.codecommune}`, `
-                    ${irow('Code commune', p.codecommune)}
-                    ${irow('Coeff moyen', p.valeur)}
-                    ${irow('Nb parcelles', p.nb_parcelles)}
-                    <div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 13 pour voir le détail par parcelle</div>
-                `);
+                showInfo('coeff', `Commune ${p.codecommune}`,
+                    irow('Coeff moyen', p.valeur) +
+                    irow('Nb parcelles', p.nb_parcelles) +
+                    `<div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 13 pour voir le détail par parcelle</div>`
+                );
             });
         }
 
@@ -266,28 +266,26 @@ export function initCoeff(map) {
     champEl.addEventListener('change', () => { polyCache = null; clusterCache = null; clearInfo('coeff'); loadCoeff(map); });
 
     map.on('click', 'coeff-fill', e => {
+        if (!active) return;
         const p    = e.features[0].properties;
         const evol = (p.coeff_2026 != null && p.coeff_2017 != null && +p.coeff_2017 !== 0)
             ? ((+p.coeff_2026 - +p.coeff_2017) / +p.coeff_2017 * 100).toFixed(1) : null;
         const cls  = evol > 0 ? 'tag-up' : evol < 0 ? 'tag-down' : '';
         const esc = v => String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         const html = `
-            ${irow('IDU', p.idu)}
-            ${irow('Commune', p.nom_commune ? `${esc(p.nom_commune)} (${esc(p.codecommune)})` : esc(p.codecommune))}
-            ${irow('Section', p.section)}
-            ${irow('Parcelle', p.parcelle)}
-            <div class="info-row">
+            ${evol !== null ? `<div class="info-row">
                 <span class="info-label">Évolution 2017→2026</span>
-                <span class="info-value ${cls}">${evol !== null ? evol+' %' : '–'}</span>
-            </div>
+                <span class="info-value ${cls}">${evol} %</span>
+            </div>` : ''}
             <table class="evol-table">
                 <tr><th>Année</th><th>Coeff</th></tr>
-                ${[2017,2018,2019,2020,2024,2026].map(y =>
-                    `<tr><td>${y}</td><td>${esc(p['coeff_'+y] ?? '–')}</td></tr>`
-                ).join('')}
+                ${[2017,2018,2019,2020,2024,2026]
+                    .filter(y => p['coeff_'+y] != null)
+                    .map(y => `<tr><td>${y}</td><td>${esc(p['coeff_'+y])}</td></tr>`)
+                    .join('')}
             </table>`;
         const commune = p.nom_commune ? `${p.nom_commune} (${p.codecommune})` : p.codecommune;
-        const title = `${commune} — Section ${p.section} · Parcelle ${p.parcelle}`;
+        const title = `${commune} — Sect. ${p.section} · Parc. ${p.parcelle}`;
         showInfo('coeff', title, html);
     });
 

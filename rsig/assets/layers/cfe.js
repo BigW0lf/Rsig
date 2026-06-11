@@ -150,23 +150,26 @@ export function initCfe(map) {
     map.on('mouseleave', 'cfe-fill', () => map.getCanvas().style.cursor = '');
 
     map.on('click', 'cfe-fill', e => {
+        if (!active) return;
         const p   = e.features[0].properties;
         const fmtv = (v, suf) => v != null ? (+v).toFixed(4) + suf : '–';
         const fmtp = v => v != null ? (+v).toFixed(3) + ' %' : '–';
         const { cat } = getOptions();
 
+        const fmtvN = (v, suf) => v != null ? (+v).toFixed(4) + suf : null;
+        const fmtpN = v => v != null ? (+v).toFixed(3) + ' %' : null;
         if (p.nom_dep) {
             showInfo('cfe', `${p.nom_dep} (${p.code_dep})`,
-                irow(`CFE estimée/m² (${cat})`, fmtv(p.cfe_estime, ' €/m²')) +
-                irow('Tarif moyen section', fmtv(p.tarif_moyen, ' €/m²')) +
+                irow(`CFE estimée/m² (${cat})`, fmtvN(p.cfe_estime, ' €/m²')) +
+                irow('Tarif moyen section', fmtvN(p.tarif_moyen, ' €/m²')) +
                 `<div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 9 pour le détail par commune</div>`
             );
         } else {
             showInfo('cfe', `${p.libcom} (${p.code_insee})`,
-                irow(`CFE estimée/m² (${cat})`, fmtv(p.cfe_estime, ' €/m²')) +
-                irow('Tarif section', fmtv(p.tarif_section, ' €/m²')) +
-                irow('Taux CFE total', fmtp(p.taux_cfe_total)) +
-                irow('Coeff. neutralisation', p.coeff_neut_com ?? '–')
+                irow(`CFE estimée/m² (${cat})`, fmtvN(p.cfe_estime, ' €/m²')) +
+                irow('Tarif section', fmtvN(p.tarif_section, ' €/m²')) +
+                irow('Taux CFE total', fmtpN(p.taux_cfe_total)) +
+                irow('Coeff. neutralisation', p.coeff_neut_com != null ? p.coeff_neut_com : null)
             );
         }
     });

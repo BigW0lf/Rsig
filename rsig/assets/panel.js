@@ -37,3 +37,8 @@ export function irow(label, val) {
     if (val === null || val === undefined || val === '') return '';
     return `<div class="info-row"><span class="info-label">${_esc(label)}</span><span class="info-value">${_esc(val)}</span></div>`;
 }
+
+export function irowHtml(label, val) {
+    if (val === null || val === undefined || val === '') return '';
+    return `<div class="info-row"><span class="info-label">${_esc(label)}</span><span class="info-value">${val}</span></div>`;
+}

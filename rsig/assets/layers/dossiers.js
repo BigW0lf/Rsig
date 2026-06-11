@@ -1,6 +1,6 @@
 import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
-import { showInfo, clearInfo, irow } from '../panel.js';
+import { showInfo, clearInfo, irow, irowHtml } from '../panel.js';
 
 let active = false;
 let loaded = false;
@@ -21,9 +21,9 @@ export function loadDossiers(map) {
             // Appliquer les filtres éventuellement déjà posés avant le chargement
             const displayFc = filter ? filter.applyFilters(fc) : fc;
 
-            const tfVals = fc.features.map(f => +f.properties.apo_montanttaxefonciere).filter(v => isFinite(v) && v > 0);
+            const tfVals = fc.features.map(f => +f.properties.montant_tf).filter(v => isFinite(v) && v > 0);
             const breaks = computeBreaks(tfVals, 5);
-            const color  = stepExpr('apo_montanttaxefonciere', breaks, PAL.tf, '#94a3b8');
+            const color  = stepExpr('montant_tf', breaks, PAL.tf, '#94a3b8');
 
             map.addSource('dossiers-src', { type: 'geojson', data: displayFc, cluster: true, clusterRadius: 40 });
             map.addLayer({ id: 'dossiers-circle', type: 'circle', source: 'dossiers-src',
@@ -43,7 +43,7 @@ export function loadDossiers(map) {
 
             loaded = true;
             bddOnTop(map);
-            saveLegend('dossiers', 'Taxe foncière', breaks, PAL.tf, ' €');
+            saveLegend('dossiers', 'Taxe foncière (€)', breaks, PAL.tf, ' €');
 
             map.on('mouseenter', 'dossiers-circle',  () => map.getCanvas().style.cursor = 'pointer');
             map.on('mouseleave', 'dossiers-circle',  () => map.getCanvas().style.cursor = '');
@@ -64,22 +64,21 @@ export function initDossiers(map) {
     const toggle = document.getElementById('toggle-dossiers');
 
     map.on('click', 'dossiers-circle', e => {
+        if (!active) return;
         const p  = e.features[0].properties;
-        const tf = +p.apo_montanttaxefonciere;
+        const tf = +p.montant_tf;
+        const etatCls = p.etat === '+' ? 'color:#16a34a' : p.etat === '-' ? 'color:#dc2626' : 'color:inherit';
+        const etatFmt = p.etat ? `<span style="${etatCls};font-weight:700">${p.etat}</span>` : null;
         const html = `
-            ${irow('Dossier', p.dossier)}
-            ${irow('Client', p.name)}
-            ${irow('Réf. client', p.rtx_code)}
-            ${irow('Adresse', p.adresse_complete)}
+            ${irow('Client', p.client_name)}
             ${irow('Ville', p.ville)}
-            ${irow('Taxe foncière', isFinite(tf) && tf > 0 ? tf.toLocaleString('fr-FR')+' €' : '–')}
-            ${irow('Section', p.section)}
-            ${irow('Parcelle', p.parcelle)}
-            ${irow('INSEE', p.insee)}
-            ${irow('Date demande', p.date_demande)}
-            ${irow('Date remise', p.date_remise)}`;
-        const loc = [p.ville, p.insee].filter(Boolean).join(' — ');
-        const title = loc ? `${loc} · Dossier ${p.dossier}` : `Dossier ${p.dossier}`;
+            ${irow('Réf. client', p.rtx_code)}
+            ${irow('Taxe foncière', isFinite(tf) && tf > 0 ? tf.toLocaleString('fr-FR')+' €' : null)}
+            ${irow('Date remise', p.date_remise)}
+            ${irowHtml('État', etatFmt)}
+            ${irow('Phase', p.phase)}
+            ${irow('Auditeur', p.auditeur)}`;
+        const title = p.dossier || 'Dossier';
         showInfo('dossiers', title, html);
     });
 

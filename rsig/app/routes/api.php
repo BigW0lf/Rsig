@@ -6,8 +6,12 @@ Flight::route('POST /api/crm/sync', function () {
     $db = getDb();
     if (!$db) { Flight::json(['error' => 'Base non disponible'], 503); return; }
 
-    // Vérifie qu'une sync n'est pas déjà en cours
-    $running = $db->query("SELECT id FROM crm_sync_log WHERE status='running' AND started_at > now() - interval '10 minutes'")->fetchColumn();
+    // Marquer les syncs bloquées (running depuis >30 min) comme erreur
+    $db->exec("UPDATE crm_sync_log SET finished_at=now(), status='error', message='Timeout — processus arrêté'
+               WHERE status='running' AND started_at < now() - interval '30 minutes'");
+
+    // Vérifie qu'une sync n'est pas déjà en cours (fenêtre 30 min)
+    $running = $db->query("SELECT id FROM crm_sync_log WHERE status='running' AND started_at > now() - interval '30 minutes'")->fetchColumn();
     if ($running) { Flight::json(['status' => 'already_running', 'log_id' => $running]); return; }
 
     // Crée l'entrée de log
@@ -44,53 +48,66 @@ Flight::route('GET /api/crm/sync/status', function () {
     ]);
 });
 
-// ── GeoJSON dossiers — miroir CRM si peuplé, sinon dossier_acc_geo ─
+// ── GeoJSON dossiers — table crm_dossiers unifiée, fallback dossier_acc_geo ─
 Flight::route('GET /api/crm/geojson', function () {
     $db = getDb();
     if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
 
-    $mirrorCount = (int)$db->query("SELECT COUNT(*) FROM crm_dossiers_mirror")->fetchColumn();
+    $hasTable = (int)$db->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name='crm_dossiers'")->fetchColumn();
+    $count    = $hasTable ? (int)$db->query("SELECT COUNT(*) FROM crm_dossiers")->fetchColumn() : 0;
 
-    if ($mirrorCount > 0) {
-        // Données fraîches depuis le miroir CRM
-        // montant_tf : depuis le site miroir, sinon fallback dossier_acc_geo
+    if ($count > 0) {
         $sql = "SELECT
-                    d.dossierid                        AS ogc_fid,
-                    d.numero                           AS dossier,
-                    d.client_name                      AS name,
-                    d.reference_client                 AS rtx_code,
-                    s.adresse                          AS adresse_complete,
-                    s.ville,
-                    s.code_postal,
-                    s.code_insee                       AS insee,
-                    s.section,
-                    s.parcelle,
-                    s.lot,
-                    COALESCE(s.montant_tf, old.apo_montanttaxefonciere) AS apo_montanttaxefonciere,
-                    d.date_demande,
-                    d.date_remise,
-                    ST_AsGeoJSON(s.geom, 6)::text      AS geojson
-                FROM crm_dossiers_mirror d
-                JOIN crm_sites_mirror s ON s.siteid = d.site_id
-                LEFT JOIN dossier_acc_geo old ON old.dossier = d.numero
-                WHERE s.geom IS NOT NULL";
+                    numero           AS dossier,
+                    reference_client AS rtx_code,
+                    client_name,
+                    account_rtx_code,
+                    account_cp,
+                    auditeur,
+                    produit,
+                    phase,
+                    etat,
+                    date_demande,
+                    date_remise,
+                    date_preetudie,
+                    adresse,
+                    adresse_norm,
+                    ville,
+                    code_postal,
+                    code_insee       AS insee,
+                    section,
+                    parcelle,
+                    lot,
+                    montant_tf,
+                    type_activite,
+                    ST_AsGeoJSON(geom, 6)::text AS geojson
+                FROM crm_dossiers
+                WHERE geom IS NOT NULL";
     } else {
-        // Fallback : table dossier_acc_geo existante (x/y Lambert 93)
+        // Fallback : table dossier_acc_geo
         $sql = "SELECT
-                    ogc_fid::text                      AS ogc_fid,
                     dossier,
-                    name,
                     rtx_code,
-                    adresse_complete,
+                    name                               AS client_name,
+                    NULL::text                         AS account_rtx_code,
+                    NULL::text                         AS account_cp,
+                    NULL::text                         AS auditeur,
+                    NULL::text                         AS produit,
+                    NULL::text                         AS phase,
+                    NULL::text                         AS etat,
+                    NULL::date                         AS date_demande,
+                    NULL::date                         AS date_remise,
+                    NULL::date                         AS date_preetudie,
+                    adresse_complete                   AS adresse,
+                    NULL::text                         AS adresse_norm,
                     NULL::text                         AS ville,
                     cp                                 AS code_postal,
                     insee,
                     section,
                     NULL::text                         AS parcelle,
                     lot,
-                    apo_montanttaxefonciere,
-                    NULL::date                         AS date_demande,
-                    NULL::date                         AS date_remise,
+                    apo_montanttaxefonciere            AS montant_tf,
+                    NULL::text                         AS type_activite,
                     ST_AsGeoJSON(ST_Transform(geom::geometry, 4326), 6)::text AS geojson
                 FROM dossier_acc_geo
                 WHERE geom IS NOT NULL";
@@ -441,23 +458,18 @@ Flight::route('GET /api/cfe', function () {
     if (!$cat || !preg_match('/^[A-Z]{3}[0-9]$/', $cat)) { Flight::json(['error' => 'categorie requise'], 400); return; }
     $annee = validateAnnee(Flight::request()->query['annee'] ?? '');
     $col   = "val_$annee";
-    $sql = "SELECT g.code_insee, g.section, g.secteur, g.libcom,
+    $sql = "SELECT s.code_insee, s.section, s.secteur, s.nom_com AS libcom,
                    v.millesime, v.taux_cfe_total, v.coeff_neut_com, v.indicateur_cfe_m2,
                    ROUND((v.indicateur_cfe_m2 * t.$col::numeric)::numeric,4) AS cfe_estime,
                    ROUND(t.$col::numeric,2) AS tarif_section,
-                   ST_AsGeoJSON(ST_Transform(ST_SimplifyPreserveTopology(g.geom,2),4326),4)::text AS geojson
-            FROM (
-                SELECT code_insee, section,
-                       MIN(secteur) AS secteur, MIN(nom_com) AS libcom,
-                       ST_Union(geom) AS geom,
-                       CASE WHEN MIN(code_dep)='97' THEN left(MIN(code_insee),3) ELSE MIN(code_dep) END AS dep
-                FROM sections_2025
-                WHERE ST_Intersects(geom, ST_Transform(ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326),2154))
-                GROUP BY code_insee, section
-            ) g
-            JOIN tarifs_pivot t ON t.dep = g.dep AND t.num_secteur = g.secteur AND t.categorie = :cat AND t.$col IS NOT NULL
-            JOIN cfe_calcul v ON v.code_insee = g.code_insee
-            WHERE v.indicateur_cfe_m2 IS NOT NULL
+                   ST_AsGeoJSON(ST_Transform(ST_SimplifyPreserveTopology(s.geom,2),4326),4)::text AS geojson
+            FROM sections_2025 s
+            JOIN tarifs_pivot t
+                ON t.dep = CASE WHEN s.code_dep='97' THEN left(s.code_insee,3) ELSE s.code_dep END
+               AND t.num_secteur = s.secteur AND t.categorie = :cat AND t.$col IS NOT NULL
+            JOIN cfe_calcul v ON v.code_insee = s.code_insee
+            WHERE ST_Intersects(s.geom, ST_Transform(ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326),2154))
+              AND v.indicateur_cfe_m2 IS NOT NULL
             LIMIT 5000";
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':cat', $cat);
@@ -506,25 +518,20 @@ Flight::route('GET /api/tf', function () {
     if (!$cat || !preg_match('/^[A-Z]{3}[0-9]$/', $cat)) { Flight::json(['error' => 'categorie requise'], 400); return; }
     $annee = validateAnnee(Flight::request()->query['annee'] ?? '');
     $col   = "val_$annee";
-    $sql = "SELECT g.code_insee, g.section, g.secteur, g.libcom,
+    $sql = "SELECT s.code_insee, s.section, s.secteur, s.nom_com AS libcom,
                    v.millesime, v.taux_tf_total, v.taux_com, v.taux_synd,
                    v.taux_epci, v.taux_tse, v.taux_gemapi, v.taux_tasa,
                    v.taux_teom, v.indicateur_tf_m2,
                    ROUND((v.indicateur_tf_m2 * t.$col::numeric)::numeric,4) AS tf_estime,
                    ROUND(t.$col::numeric,2) AS tarif_section,
-                   ST_AsGeoJSON(ST_Transform(ST_SimplifyPreserveTopology(g.geom,2),4326),4)::text AS geojson
-            FROM (
-                SELECT code_insee, section,
-                       MIN(secteur) AS secteur, MIN(nom_com) AS libcom,
-                       ST_Union(geom) AS geom,
-                       CASE WHEN MIN(code_dep)='97' THEN left(MIN(code_insee),3) ELSE MIN(code_dep) END AS dep
-                FROM sections_2025
-                WHERE ST_Intersects(geom, ST_Transform(ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326),2154))
-                GROUP BY code_insee, section
-            ) g
-            JOIN tarifs_pivot t ON t.dep = g.dep AND t.num_secteur = g.secteur AND t.categorie = :cat AND t.$col IS NOT NULL
-            JOIN tf_calcul v ON v.code_insee = g.code_insee AND v.millesime = :annee
-            WHERE v.indicateur_tf_m2 IS NOT NULL AND v.indicateur_tf_m2 > 0
+                   ST_AsGeoJSON(ST_Transform(ST_SimplifyPreserveTopology(s.geom,2),4326),4)::text AS geojson
+            FROM sections_2025 s
+            JOIN tarifs_pivot t
+                ON t.dep = CASE WHEN s.code_dep='97' THEN left(s.code_insee,3) ELSE s.code_dep END
+               AND t.num_secteur = s.secteur AND t.categorie = :cat AND t.$col IS NOT NULL
+            JOIN tf_calcul v ON v.code_insee = s.code_insee AND v.millesime = :annee
+            WHERE ST_Intersects(s.geom, ST_Transform(ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326),2154))
+              AND v.indicateur_tf_m2 IS NOT NULL AND v.indicateur_tf_m2 > 0
             LIMIT 5000";
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':cat', $cat);
@@ -883,92 +890,127 @@ Flight::route('GET /api/ta/departements', function () {
 // ── TA majorée — sections + centroïds pour clusters ──────
 Flight::route('GET /api/ta/majore/millesimes', function () {
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
-    $stmt = $db->query("SELECT DISTINCT millesime FROM ta_majore_sections ORDER BY millesime DESC");
+    // Union des millésimes sections + parcelles
+    $stmt = $db->query("
+        SELECT DISTINCT millesime FROM (
+            SELECT millesime FROM ta_majore_sections
+            UNION
+            SELECT millesime FROM ta_majore_parcelles
+        ) m ORDER BY millesime DESC
+    ");
     Flight::json($stmt->fetchAll(PDO::FETCH_COLUMN));
 });
 
 Flight::route('GET /api/ta/majore', function () {
-    $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
-    $b   = parseBbox();
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $b  = parseBbox();
+    if (!$b) { Flight::json(['error' => 'bbox requis'], 400); return; }
+
     $mil = (int)(Flight::request()->query['millesime'] ?? 0);
-    $milFilter  = $mil > 0 ? "AND millesime = $mil" : "";
-    // Sans bbox : on charge tout (accepté car ~1000 sections seulement)
-    // Avec bbox : filtre spatial
-    $bboxFilter = $b ? "AND ST_Intersects(geom, ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326))" : "";
+    $milFilter = $mil > 0 ? "AND millesime = $mil" : "";
 
-    // Sections depuis la vue matérialisée (déjà dédupliquée et simplifiée)
-    $sqlSect = "SELECT dep, commune, code_insee, libcom, prefixe, section,
-                    NULL::text AS parcelle,
-                    taux, date_effet, millesime,
-                    ST_AsGeoJSON(geom,4)::text AS geojson,
-                    ST_AsGeoJSON(centroid,6)::text AS centroid_geojson
-               FROM ta_majore_sections_latest
-               WHERE 1=1 $milFilter $bboxFilter";
+    // Taille de la bbox en degrés : grande bbox → on ne sort que des points (centroides)
+    // pour éviter de sérialiser des centaines de milliers de polygones
+    $bboxW   = abs($b[2] - $b[0]);
+    $bboxH   = abs($b[3] - $b[1]);
+    $isLarge = ($bboxW > 3 || $bboxH > 2);   // > ~dep entier → mode points
 
-    // Parcelles (si table peuplée) : dédupliqué par dep+commune+section+parcelle
-    $sqlParc = "SELECT DISTINCT ON (dep, commune, section, parcelle)
-                    dep, commune, code_insee, libcom, prefixe, section, parcelle,
-                    taux, date_effet, millesime,
-                    ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom,0.0001),5)::text AS geojson,
-                    ST_AsGeoJSON(ST_Centroid(geom),6)::text AS centroid_geojson
-               FROM ta_majore_parcelles
-               WHERE 1=1 $milFilter $bboxFilter
-               ORDER BY dep, commune, section, parcelle, millesime DESC, taux DESC";
+    if ($isLarge) {
+        // Mode points : un centroïde léger par commune (ST_Centroid sur un seul geom/commune)
+        // Pas de ST_Union → rapide même sur 450k lignes
+        $sqlPoints = "SELECT z.code_insee, z.dep, z.libcom, z.taux_max AS taux, z.millesime,
+                          ST_AsGeoJSON(z.pt, 5)::text AS geojson
+                      FROM (
+                          SELECT code_insee, MAX(dep) AS dep, MAX(libcom) AS libcom,
+                                 MAX(taux) AS taux_max, MAX(millesime) AS millesime,
+                                 ST_Centroid(ST_Collect(ST_PointOnSurface(geom))) AS pt
+                          FROM (
+                              SELECT code_insee, dep, libcom, taux, millesime, geom
+                              FROM ta_majore_parcelles
+                              WHERE ST_Intersects(geom, ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326)) $milFilter
+                              UNION ALL
+                              SELECT code_insee, dep, libcom, taux, millesime, geom
+                              FROM ta_majore_sections_latest
+                              WHERE ST_Intersects(geom, ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326)) $milFilter
+                          ) combined
+                          GROUP BY code_insee
+                      ) z";
 
-    $polys  = [];
-    $points = [];
-    $seenSections = []; // sections couvertes par des parcelles → on les exclut des sections
-
-    // Charger les parcelles d'abord
-    try {
-        if ($b) {
-            $stmt = $db->prepare($sqlParc);
-            $stmt->bindValue(':x1',$b[0]); $stmt->bindValue(':y1',$b[1]);
-            $stmt->bindValue(':x2',$b[2]); $stmt->bindValue(':y2',$b[3]);
-        } else {
-            $stmt = $db->prepare($sqlParc);
-        }
-        $stmt->execute();
-        foreach ($stmt as $row) {
-            $key = $row['dep'].'|'.$row['commune'].'|'.$row['section'];
-            $seenSections[$key] = true;
-            $g = json_decode((string)(is_resource($row['geojson']) ? stream_get_contents($row['geojson']) : $row['geojson']), true);
-            $c = json_decode((string)(is_resource($row['centroid_geojson']) ? stream_get_contents($row['centroid_geojson']) : $row['centroid_geojson']), true);
-            $props = ['dep'=>$row['dep'],'commune'=>$row['commune'],'code_insee'=>$row['code_insee'],
-                      'libcom'=>$row['libcom'],'prefixe'=>$row['prefixe'],'section'=>$row['section'],
-                      'parcelle'=>$row['parcelle'],'taux'=>(float)$row['taux'],
-                      'date_effet'=>$row['date_effet'],'millesime'=>(int)$row['millesime']];
-            if ($g) $polys[]  = ['type'=>'Feature','geometry'=>$g,'properties'=>$props];
-            if ($c) $points[] = ['type'=>'Feature','geometry'=>$c,'properties'=>$props];
-        }
-    } catch (\Throwable $e) { /* table pas encore peuplée */ }
-
-    // Sections : exclure celles déjà couvertes par des parcelles
-    if ($b) {
-        $stmt = $db->prepare($sqlSect);
+        $stmt = $db->prepare($sqlPoints);
         $stmt->bindValue(':x1',$b[0]); $stmt->bindValue(':y1',$b[1]);
         $stmt->bindValue(':x2',$b[2]); $stmt->bindValue(':y2',$b[3]);
-    } else {
-        $stmt = $db->prepare($sqlSect);
-    }
-    $stmt->execute();
-    foreach ($stmt as $row) {
-        $key = $row['dep'].'|'.$row['commune'].'|'.$row['section'];
-        if (isset($seenSections[$key])) continue; // parcelles présentes → on skip la section
-        $g = json_decode((string)(is_resource($row['geojson']) ? stream_get_contents($row['geojson']) : $row['geojson']), true);
-        $c = json_decode((string)(is_resource($row['centroid_geojson']) ? stream_get_contents($row['centroid_geojson']) : $row['centroid_geojson']), true);
-        $props = ['dep'=>$row['dep'],'commune'=>$row['commune'],'code_insee'=>$row['code_insee'],
-                  'libcom'=>$row['libcom'],'prefixe'=>$row['prefixe'],'section'=>$row['section'],
-                  'parcelle'=>null,'taux'=>(float)$row['taux'],
-                  'date_effet'=>$row['date_effet'],'millesime'=>(int)$row['millesime']];
-        if ($g) $polys[]  = ['type'=>'Feature','geometry'=>$g,'properties'=>$props];
-        if ($c) $points[] = ['type'=>'Feature','geometry'=>$c,'properties'=>$props];
+        $stmt->execute();
+        $features = [];
+        foreach ($stmt as $row) {
+            $g = json_decode((string)(is_resource($row['geojson']) ? stream_get_contents($row['geojson']) : $row['geojson']), true);
+            if (!$g) continue;
+            $features[] = ['type'=>'Feature','geometry'=>$g,'properties'=>[
+                'dep'=>$row['dep'],'code_insee'=>$row['code_insee'],
+                'libcom'=>$row['libcom'],'type_zone'=>'commune',
+                'taux'=>(float)$row['taux'],'millesime'=>(int)$row['millesime'],
+            ]];
+        }
+        Flight::json(['type'=>'FeatureCollection','features'=>$features,'mode'=>'points']);
+        return;
     }
 
-    Flight::json([
-        'polygons' => ['type'=>'FeatureCollection','features'=>$polys],
-        'points'   => ['type'=>'FeatureCollection','features'=>$points],
-    ]);
+    // Mode polygones (bbox petite) : parcelles en priorité, sections en complément
+    $sqlParc = "SELECT DISTINCT ON (code_insee, section, parcelle)
+                    dep, commune, code_insee, libcom, prefixe, section, parcelle,
+                    taux, date_effet, millesime,
+                    ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.00005), 5)::text AS geojson
+               FROM ta_majore_parcelles
+               WHERE ST_Intersects(geom, ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326)) $milFilter
+               ORDER BY code_insee, section, parcelle, millesime DESC, taux DESC";
+
+    $sqlSect = "SELECT dep, commune, s.code_insee, s.libcom, s.prefixe, s.section,
+                    NULL::text AS parcelle,
+                    s.taux, s.date_effet, s.millesime,
+                    ST_AsGeoJSON(s.geom, 4)::text AS geojson
+               FROM ta_majore_sections_latest s
+               WHERE ST_Intersects(s.geom, ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326)) $milFilter
+                 AND NOT EXISTS (
+                     SELECT 1 FROM ta_majore_parcelles p
+                     WHERE p.code_insee = s.code_insee AND p.section = s.section
+                 )";
+
+    $features = [];
+
+    try {
+        $stmt = $db->prepare($sqlParc);
+        $stmt->bindValue(':x1',$b[0]); $stmt->bindValue(':y1',$b[1]);
+        $stmt->bindValue(':x2',$b[2]); $stmt->bindValue(':y2',$b[3]);
+        $stmt->execute();
+        foreach ($stmt as $row) {
+            $g = json_decode((string)(is_resource($row['geojson']) ? stream_get_contents($row['geojson']) : $row['geojson']), true);
+            if (!$g || empty($g['coordinates'])) continue;
+            $features[] = ['type'=>'Feature','geometry'=>$g,'properties'=>[
+                'dep'=>$row['dep'],'commune'=>$row['commune'],'code_insee'=>$row['code_insee'],
+                'libcom'=>$row['libcom'],'prefixe'=>$row['prefixe'],'section'=>$row['section'],
+                'parcelle'=>$row['parcelle'],'type_zone'=>'parcelle',
+                'taux'=>(float)$row['taux'],'date_effet'=>$row['date_effet'],
+                'millesime'=>(int)$row['millesime'],
+            ]];
+        }
+    } catch (\Throwable $e) {}
+
+    $stmt = $db->prepare($sqlSect);
+    $stmt->bindValue(':x1',$b[0]); $stmt->bindValue(':y1',$b[1]);
+    $stmt->bindValue(':x2',$b[2]); $stmt->bindValue(':y2',$b[3]);
+    $stmt->execute();
+    foreach ($stmt as $row) {
+        $g = json_decode((string)(is_resource($row['geojson']) ? stream_get_contents($row['geojson']) : $row['geojson']), true);
+        if (!$g || empty($g['coordinates'])) continue;
+        $features[] = ['type'=>'Feature','geometry'=>$g,'properties'=>[
+            'dep'=>$row['dep'],'commune'=>$row['commune'],'code_insee'=>$row['code_insee'],
+            'libcom'=>$row['libcom'],'prefixe'=>$row['prefixe'],'section'=>$row['section'],
+            'parcelle'=>null,'type_zone'=>'section',
+            'taux'=>(float)$row['taux'],'date_effet'=>$row['date_effet'],
+            'millesime'=>(int)$row['millesime'],
+        ]];
+    }
+
+    Flight::json(['type'=>'FeatureCollection','features'=>$features,'mode'=>'polygons']);
 });
 
 // ── TA parcelles — appel direct API DGFIP par bbox ────────

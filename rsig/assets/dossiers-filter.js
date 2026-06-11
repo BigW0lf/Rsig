@@ -6,23 +6,24 @@
 
 // ── Définition des champs filtrables ──────────────────────────────────────
 const FIELDS = [
-    { key: 'dossier',                   label: 'N° dossier',       type: 'text' },
-    { key: 'name',                      label: 'Client',            type: 'text' },
-    { key: 'ville',                     label: 'Ville',             type: 'text' },
-    { key: 'insee',                     label: 'INSEE',             type: 'text' },
-    { key: 'rtx_code',                  label: 'Réf. client',       type: 'text' },
-    { key: 'section',                   label: 'Section',           type: 'text' },
-    { key: 'lot',                       label: 'Lot',               type: 'text' },
-    { key: 'apo_montanttaxefonciere',   label: 'Taxe foncière',     type: 'number' },
-    { key: 'date_demande',              label: 'Date demande',      type: 'date' },
-    { key: 'date_remise',               label: 'Date remise',       type: 'date' },
+    { key: 'auditeur',    label: 'Auditeur',       type: 'select' },
+    { key: 'phase',       label: 'Phase',           type: 'select' },
+    { key: 'etat',        label: 'État',            type: 'select' },
+    { key: 'client_name', label: 'Client',          type: 'text'   },
+    { key: 'montant_tf',  label: 'Taxe foncière',   type: 'number' },
+    { key: 'ville',       label: 'Ville',           type: 'text'   },
+    { key: 'rtx_code',    label: 'Réf. client',     type: 'text'   },
+    { key: 'date_remise', label: 'Date remise',     type: 'date'   },
 ];
+
+// Valeurs uniques extraites du GeoJSON (peuplées dans setFullData)
+const _selectOptions = { auditeur: [], phase: [], etat: [] };
 
 const OPERATORS = {
     text:   [
-        { value: 'contains',    label: 'contient' },
-        { value: 'startswith',  label: 'commence par' },
-        { value: 'exact',       label: 'est exactement' },
+        { value: 'contains',   label: 'contient' },
+        { value: 'startswith', label: 'commence par' },
+        { value: 'exact',      label: 'est exactement' },
     ],
     number: [
         { value: 'eq',  label: '=' },
@@ -35,6 +36,9 @@ const OPERATORS = {
         { value: 'after',   label: 'après le' },
         { value: 'before',  label: 'avant le' },
         { value: 'between', label: 'entre' },
+    ],
+    select: [
+        { value: 'exact', label: 'est' },
     ],
 };
 
@@ -88,6 +92,10 @@ function matchRule(props, rule) {
             return d >= d1 && d <= d2;
         }
         return true;
+    }
+
+    if (fieldDef.type === 'select') {
+        return (raw ?? '') === rule.value;
     }
 
     return true;
@@ -177,10 +185,14 @@ function buildForm() {
     const opSel = document.createElement('select');
     opSel.className = 'df-select';
 
-    // Value input(s)
+    // Value input (texte/nombre/date)
     const val1 = document.createElement('input');
     val1.className = 'df-input';
     val1.placeholder = 'Valeur…';
+
+    // Value select (pour les champs type 'select')
+    const val1Sel = document.createElement('select');
+    val1Sel.className = 'df-select';
 
     const val2Wrap = document.createElement('span');
     val2Wrap.className = 'df-val2-wrap';
@@ -201,8 +213,23 @@ function buildForm() {
             opt.textContent = o.label;
             opSel.appendChild(opt);
         });
-        val1.type = type === 'date' ? 'date' : (type === 'number' ? 'number' : 'text');
-        val2.type = val1.type;
+        if (type === 'select') {
+            // Peupler le select avec les valeurs uniques
+            val1Sel.innerHTML = '';
+            (_selectOptions[fieldDef.key] || []).forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v;
+                opt.textContent = v || '(vide)';
+                val1Sel.appendChild(opt);
+            });
+            val1.style.display    = 'none';
+            val1Sel.style.display = '';
+        } else {
+            val1.style.display    = '';
+            val1Sel.style.display = 'none';
+            val1.type = type === 'date' ? 'date' : (type === 'number' ? 'number' : 'text');
+            val2.type = val1.type;
+        }
         updateVal2();
     }
 
@@ -210,6 +237,7 @@ function buildForm() {
         val2Wrap.style.display = opSel.value === 'between' ? 'inline-flex' : 'none';
     }
 
+    val1Sel.style.display = 'none';
     fieldSel.addEventListener('change', updateOpSel);
     opSel.addEventListener('change', updateVal2);
     updateOpSel();
@@ -222,8 +250,10 @@ function buildForm() {
     addBtn.className = 'df-btn df-btn-ok';
     addBtn.textContent = 'Ajouter';
     addBtn.addEventListener('click', () => {
-        const v = val1.value.trim();
-        if (!v) { val1.focus(); return; }
+        const fieldDef = FIELDS.find(f => f.key === fieldSel.value);
+        const isSelect = fieldDef?.type === 'select';
+        const v = isSelect ? val1Sel.value : val1.value.trim();
+        if (!v) { (isSelect ? val1Sel : val1).focus(); return; }
         const rule = {
             id: ++_ruleIdSeq,
             field: fieldSel.value,
@@ -238,7 +268,6 @@ function buildForm() {
         _rules.push(rule);
         renderRules();
         pushToMap();
-        // Reset form
         val1.value = '';
         val2.value = '';
         _formWrap.style.display = 'none';
@@ -257,6 +286,7 @@ function buildForm() {
     form.appendChild(fieldSel);
     form.appendChild(opSel);
     form.appendChild(val1);
+    form.appendChild(val1Sel);
     form.appendChild(val2Wrap);
     form.appendChild(btnRow);
 
@@ -438,6 +468,13 @@ export function initDossiersFilter(map) {
         /** Call this from dossiers.js after loading GeoJSON to register the full dataset */
         setFullData(fc) {
             _fullGeoJSON = fc;
+            // Extraire les valeurs uniques triées pour les champs select
+            ['auditeur', 'phase', 'etat'].forEach(key => {
+                const vals = [...new Set(
+                    fc.features.map(f => f.properties[key] ?? '').filter(Boolean)
+                )].sort((a, b) => a.localeCompare(b, 'fr'));
+                _selectOptions[key] = vals;
+            });
         },
         /** Force re-apply filters to map (call after map source is ready) */
         refresh() {

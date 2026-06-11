@@ -147,29 +147,30 @@ export function initTf(map) {
     map.on('mouseleave', 'tf-fill', () => map.getCanvas().style.cursor = '');
 
     map.on('click', 'tf-fill', e => {
+        if (!active) return;
         const p    = e.features[0].properties;
         const fmtv = (v, suf) => v != null ? (+v).toFixed(4) + suf : '–';
         const fmtp = v => v != null ? (+v).toFixed(3) + ' %' : '–';
         const { cat } = getOptions();
 
+        const fmtvN = (v, suf) => v != null ? (+v).toFixed(4) + suf : null;
+        const fmtpN = v => (v != null && +v !== 0) ? (+v).toFixed(3) + ' %' : null;
         if (p.nom_dep) {
             showInfo('tf', `${p.nom_dep} (${p.code_dep})`,
-                irow(`TF estimée/m² (${cat})`, fmtv(p.tf_estime, ' €/m²')) +
-                irow('Tarif moyen section', fmtv(p.tarif_moyen, ' €/m²')) +
+                irow(`TF estimée/m² (${cat})`, fmtvN(p.tf_estime, ' €/m²')) +
+                irow('Tarif moyen section', fmtvN(p.tarif_moyen, ' €/m²')) +
                 `<div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 9 pour le détail par commune</div>`
             );
         } else {
-            const taux = +p.taux_tf_total;
-            showInfo('tf', `${p.libcom} (${p.code_insee})`,
-                irow(`TF estimée/m² (${cat})`, fmtv(p.tf_estime, ' €/m²')) +
-                irow('Indicateur TF/m²', fmtv(p.indicateur_tf_m2, '')) +
-                irow('Tarif section', fmtv(p.tarif_section, ' €/m²')) +
-                irow('Taux TF total', fmtp(taux)) +
-                irow('dont Commune', fmtp(p.taux_com)) +
-                irow('dont EPCI', fmtp(p.taux_epci)) +
-                irow('dont TSE', fmtp(p.taux_tse)) +
-                irow('dont TEOM', fmtp(p.taux_teom)) +
-                irow('Millésime taux', p.millesime)
+            showInfo('tf', `${p.libcom} (${p.code_insee}) — ${p.millesime}`,
+                irow(`TF estimée/m² (${cat})`, fmtvN(p.tf_estime, ' €/m²')) +
+                irow('Indicateur TF/m²', fmtvN(p.indicateur_tf_m2, '')) +
+                irow('Tarif section', fmtvN(p.tarif_section, ' €/m²')) +
+                irow('Taux TF total', fmtpN(p.taux_tf_total)) +
+                irow('dont Commune', fmtpN(p.taux_com)) +
+                irow('dont EPCI', fmtpN(p.taux_epci)) +
+                irow('dont TSE', fmtpN(p.taux_tse)) +
+                irow('dont TEOM', fmtpN(p.taux_teom))
             );
         }
     });

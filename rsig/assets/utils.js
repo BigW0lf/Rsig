@@ -55,12 +55,12 @@ export function fmtVal(v, suffix) {
 
 // ── Palettes ──────────────────────────────────────────────
 export const PAL = {
-    taux:    ['#4a148c', '#7b1fa2', '#ab47bc', '#42a5f5', '#b3e5fc'],
+    taux:    ['#c7e9c0', '#74c476', '#238b45', '#fd8d3c', '#bd0026'],
     coeff:   ['#ffffff', '#fee2e2', '#fca5a5', '#f87171', '#ef4444', '#b91c1c'],
     coeffEv: ['#b91c1c', '#f97316', '#facc15', '#86efac', '#16a34a'],
-    tarifs:  ['#e65100', '#fb8c00', '#ffa726', '#ffcc80', '#dce775', '#c5e1a5', '#a5d6a7'],
-    tf:      ['#eff6ff', '#93c5fd', '#3b82f6', '#1d4ed8', '#1e3a6e'],
+    tarifs:  ['#a5d6a7', '#c5e1a5', '#dce775', '#ffcc80', '#ffa726', '#fb8c00', '#e65100'],
     cfe:     ['#ffffb2', '#fed976', '#feb24c', '#fd8d3c', '#f03b20', '#bd0026'],
+    tf:      ['#ffffcc', '#c7e9b4', '#7fcdbb', '#41b6c4', '#1d91c0', '#225ea8'],
 };
 
 // ── Ordre des couches — RAF-debounced (1 seul passage/frame) ─
