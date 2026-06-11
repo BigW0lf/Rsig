@@ -468,13 +468,30 @@ export function initDossiersFilter(map) {
         /** Call this from dossiers.js after loading GeoJSON to register the full dataset */
         setFullData(fc) {
             _fullGeoJSON = fc;
-            // Extraire les valeurs uniques triées pour les champs select
+            const LS_KEY = 'dossiers_select_options';
+            let cached = {};
+            try { cached = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch (_) {}
+
+            let changed = false;
             ['auditeur', 'phase', 'etat'].forEach(key => {
                 const vals = [...new Set(
                     fc.features.map(f => f.properties[key] ?? '').filter(Boolean)
                 )].sort((a, b) => a.localeCompare(b, 'fr'));
-                _selectOptions[key] = vals;
+
+                const cachedVals = cached[key];
+                if (Array.isArray(cachedVals) && cachedVals.length === vals.length) {
+                    // Même nombre → on réutilise le cache
+                    _selectOptions[key] = cachedVals;
+                } else {
+                    _selectOptions[key] = vals;
+                    cached[key] = vals;
+                    changed = true;
+                }
             });
+
+            if (changed) {
+                try { localStorage.setItem(LS_KEY, JSON.stringify(cached)); } catch (_) {}
+            }
         },
         /** Force re-apply filters to map (call after map source is ready) */
         refresh() {
