@@ -33,6 +33,35 @@ function trackVisit(string $page, ?string $layers = null): void {
     } catch (\Exception) {}
 }
 
+// ── Tracking couches actives (appelé depuis le JS map) ────
+Flight::route('POST /api/track/layers', function () {
+    requireAuth();
+    $body   = Flight::request()->data;
+    $layers = $body['layers'] ?? null;
+    if (!is_array($layers)) { Flight::json(['ok' => false]); return; }
+    // Sanitize : uniquement des strings courtes
+    $layers = array_values(array_filter(array_map(fn($l) => is_string($l) ? substr(strip_tags($l), 0, 64) : null, $layers)));
+    $db = getDb();
+    if (!$db) { Flight::json(['ok' => false]); return; }
+    try {
+        // Mettre à jour la dernière visite carte de cet utilisateur (dans les 2h)
+        $email = $_SESSION['user_email'] ?? null;
+        $stmt  = $db->prepare(
+            "UPDATE site_visits SET layers_used = :layers
+             WHERE id = (
+                 SELECT id FROM site_visits
+                 WHERE page = 'carte' AND user_email = :email
+                   AND visited_at > now() - interval '2 hours'
+                 ORDER BY visited_at DESC LIMIT 1
+             )"
+        );
+        $stmt->execute([':layers' => json_encode($layers), ':email' => $email]);
+        Flight::json(['ok' => true]);
+    } catch (\Exception $e) {
+        Flight::json(['ok' => false, 'error' => $e->getMessage()]);
+    }
+});
+
 // ── Pages protégées ───────────────────────────────────────
 Flight::route('GET /', function () { requireAuth(); trackVisit('carte'); Flight::render('accueil'); });
 Flight::route('GET /crm', function () { requireAuth(); trackVisit('crm'); Flight::render('crm'); });
@@ -55,7 +84,7 @@ Flight::route('GET /donnees', function () { requireAuth();
         }
     }
 
-    Flight::render('donnees', compact('db', 'tables', 'table', 'cols', 'rows') + ['connected' => $db !== null]);
+    Flight::render('donnees', compact('db', 'tables', 'table', 'cols', 'rows') + ['connected' => $db !== null, 'isAdmin' => isAdmin()]);
 });
 
 Flight::route('GET /maj-bdd',  function () { requireAuth(); Flight::render('maj_bdd_archive', ['connected' => getDb() !== null]); });

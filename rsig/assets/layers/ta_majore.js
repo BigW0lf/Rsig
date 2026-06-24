@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, bddOnTop } from '../utils.js';
+import { showSpinner, hideSpinner, bddOnTop, apiFetch } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 
@@ -166,7 +166,7 @@ function load(map) {
     const mil = getMil();
     const url = `/api/ta/majore?bbox=${bboxParam(map)}${mil ? '&millesime='+mil : ''}`;
 
-    fetch(url, { signal: abortCtrl.signal })
+    apiFetch(url, { signal: abortCtrl.signal })
         .then(r => r.json())
         .then(fc => {
             hideSpinner();
@@ -195,7 +195,7 @@ function load(map) {
                 ['5–7 %','7–10 %','10–15 %','15–20 %','≥ 20 %'],
                 PALETTE, '');
         })
-        .catch(e => { hideSpinner(); if (e.name !== 'AbortError') console.error('ta-majore', e); });
+        .catch(e => { hideSpinner(); });
 }
 
 // ── Info panneau ─────────────────────────────────────────────
@@ -226,7 +226,7 @@ export function initTaMajore(map) {
             opt.value = m; opt.textContent = m;
             milSel.appendChild(opt);
         });
-    }).catch(() => {});
+    }).catch(e => console.warn('[ta-majore] millesimes', e));
 
     milSel?.addEventListener('change', () => { if (active) load(map); });
 

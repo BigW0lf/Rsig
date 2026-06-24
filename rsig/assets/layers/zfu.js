@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, bddOnTop } from '../utils.js';
+import { showSpinner, hideSpinner, bddOnTop, apiFetch } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 
@@ -11,7 +11,7 @@ const COLOR_STROKE = '#b45309';
 export function loadZfu(map) {
     if (!active || loaded) return;
     showSpinner();
-    fetch('/api/zfu')
+    apiFetch('/api/zfu')
         .then(r => r.json())
         .then(fc => {
             hideSpinner();
@@ -30,7 +30,7 @@ export function loadZfu(map) {
             map.on('mouseenter', 'zfu-fill', () => map.getCanvas().style.cursor = 'pointer');
             map.on('mouseleave', 'zfu-fill', () => map.getCanvas().style.cursor = '');
         })
-        .catch(e => { hideSpinner(); console.error('zfu', e); });
+        .catch(e => { hideSpinner(); });
 }
 
 export function initZfu(map) {

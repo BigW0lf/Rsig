@@ -48,6 +48,9 @@
     <div class="tab-bar">
         <button class="tab active" data-tab="explorer">Explorateur de tables</button>
         <button class="tab" data-tab="ta">Mise à jour Taxe d'Aménagement</button>
+        <?php if ($isAdmin): ?>
+        <button class="tab" data-tab="db">Base de données</button>
+        <?php endif; ?>
     </div>
 
     <!-- ═══ ONGLET TA ══════════════════════════════════════ -->
@@ -152,6 +155,33 @@
     <?php endif; ?>
 
     </div><!-- /tab-explorer -->
+
+    <?php if ($isAdmin): ?>
+    <!-- ═══ ONGLET BDD (admin) ════════════════════════════ -->
+    <div class="tab-panel" id="tab-db">
+        <div class="update-card">
+            <h3>Connexion base de données</h3>
+            <p style="font-size:0.82rem;color:var(--text2);margin-bottom:16px">
+                Déconnecter la BDD rend toutes les couches et API indisponibles pour les utilisateurs.
+                Utile pour une maintenance ou une migration sans couper le serveur web.
+            </p>
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+                <div style="display:flex;align-items:center;gap:8px">
+                    <span style="font-size:0.82rem;color:var(--text2)">État :</span>
+                    <span id="db-status-badge" class="status-badge status-idle">chargement…</span>
+                </div>
+                <button class="btn" id="btn-db-offline" onclick="setDbOffline(true)" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5">
+                    Déconnecter
+                </button>
+                <button class="btn" id="btn-db-online" onclick="setDbOffline(false)">
+                    Reconnecter
+                </button>
+            </div>
+            <div id="db-action-msg" style="font-size:0.82rem;color:var(--text3)"></div>
+        </div>
+    </div>
+    <?php endif; ?>
+
 </div>
 
 <script>
@@ -163,8 +193,47 @@ document.querySelectorAll('.tab').forEach(btn => {
         btn.classList.add('active');
         document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
         if (btn.dataset.tab === 'ta') loadTaStatus();
+        if (btn.dataset.tab === 'db') loadDbStatus();
     });
 });
+
+// ── BDD on/off ────────────────────────────────────────────
+function loadDbStatus() {
+    fetch('/api/db/status')
+        .then(r => r.json())
+        .then(d => renderDbStatus(d))
+        .catch(() => {});
+}
+
+function renderDbStatus(d) {
+    const badge = document.getElementById('db-status-badge');
+    const btnOff = document.getElementById('btn-db-offline');
+    const btnOn  = document.getElementById('btn-db-online');
+    if (!badge) return;
+    if (d.offline) {
+        badge.className = 'status-badge status-error';
+        badge.textContent = 'Déconnectée';
+        btnOff.disabled = true;
+        btnOn.disabled  = false;
+    } else {
+        badge.className = 'status-badge status-ok';
+        badge.textContent = d.reachable ? 'Connectée' : 'Injoignable';
+        btnOff.disabled = false;
+        btnOn.disabled  = true;
+    }
+}
+
+function setDbOffline(offline) {
+    const msg = document.getElementById('db-action-msg');
+    msg.textContent = offline ? 'Déconnexion…' : 'Reconnexion…';
+    fetch('/api/db/' + (offline ? 'offline' : 'online'), { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+            renderDbStatus({ offline: d.offline, reachable: !d.offline });
+            msg.textContent = d.offline ? 'BDD déconnectée — les API retournent des erreurs.' : 'BDD reconnectée.';
+        })
+        .catch(e => { msg.textContent = 'Erreur : ' + e.message; });
+}
 
 // ── Statut TA ─────────────────────────────────────────────
 let taPolling = null;

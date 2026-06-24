@@ -1,3 +1,5 @@
+import { showToast } from './state.js';
+
 // ── Spinner — compteur de références ─────────────────────
 const _spinner = document.getElementById('map-spinner');
 let _spinnerCount = 0;
@@ -17,6 +19,27 @@ export function hideSpinner() {
     if (_spinnerCount === 0) {
         clearTimeout(_spinnerTimer);
         if (_spinner) _spinner.style.display = 'none';
+    }
+}
+
+// ── Fetch avec timeout ────────────────────────────────────
+const API_TIMEOUT_MS = 12000;
+
+export async function apiFetch(url, opts = {}) {
+    const { signal: callerSignal, ...rest } = opts;
+    const timeout = AbortSignal.timeout(API_TIMEOUT_MS);
+    const signal  = callerSignal
+        ? AbortSignal.any([callerSignal, timeout])
+        : timeout;
+    try {
+        const r = await fetch(url, { signal, ...rest });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r;
+    } catch (e) {
+        if (e.name === 'AbortError' || e.name === 'TimeoutError') throw e;
+        console.error(`[rsig] fetch ${url}`, e);
+        showToast('Erreur réseau — réessayez');
+        throw e;
     }
 }
 

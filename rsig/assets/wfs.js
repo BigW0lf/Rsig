@@ -1,5 +1,65 @@
 import { showSpinner, hideSpinner } from './utils.js';
 
+// ── Cache millésimes ortho par département ────────────────────────────────────
+const _orthoCache = {}; // campagne → { code_dep: annee_acq }
+
+async function getOrthoAnnee(codeDep) {
+    const sel = document.getElementById('ign-campagne-ctrl');
+    const campagne = sel?.value || 'actuelle';
+    if (!_orthoCache[campagne]) {
+        try {
+            const r = await fetch('/api/ortho/millesimes?campagne=' + campagne);
+            const fc = await r.json();
+            _orthoCache[campagne] = {};
+            (fc.features || []).forEach(f => {
+                _orthoCache[campagne][f.properties.code_dep] = f.properties.annee_acq;
+            });
+        } catch { _orthoCache[campagne] = {}; }
+    }
+    return _orthoCache[campagne][codeDep] ?? null;
+}
+
+// ── Labels lisibles par type de feature ──────────────────────────────────────
+const TYPE_LABEL = {
+    departements: 'Département',
+    communes: 'Commune',
+    sections: 'Section cadastrale',
+    parcelles: 'Parcelle cadastrale',
+};
+
+function featureProps(type, props) {
+    switch (type) {
+        case 'departements':
+            return [
+                ['Code', props.code_insee],
+                ['Département', props.nom_officiel],
+            ];
+        case 'communes':
+            return [
+                ['Code INSEE', props.code_insee],
+                ['Commune', props.nom_com],
+                ['Département', props.code_dep],
+            ];
+        case 'sections':
+            return [
+                ['Commune', props.nom_com],
+                ['Code INSEE', props.code_insee],
+                ['Section', props.section],
+                ['Préfixe', props.com_abs || null],
+            ];
+        case 'parcelles':
+            return [
+                ['Commune', props.nom_com],
+                ['Code INSEE', props.code_insee],
+                ['Section', props.section],
+                ['Numéro', props.numero],
+                ['IDU', props.idu],
+                ['Contenance', props.contenance != null ? props.contenance + ' m²' : null],
+            ];
+        default: return [];
+    }
+}
+
 const typeNames = {
     departements: 'LIMITES_ADMINISTRATIVES_EXPRESS.LATEST:departement',
     communes:     'CADASTRALPARCELS.PARCELLAIRE_EXPRESS:commune',
@@ -109,4 +169,64 @@ export function updateWfs(map) {
         hideSpinner();
     })
     .catch(err => { hideSpinner(); if (err.name !== 'AbortError') console.error('WFS:', err); });
+}
+
+// ── Clic + hover sur les features WFS ────────────────────────────────────────
+export function initWfsClick(map) {
+    let _popup = null;
+
+    map.on('click', 'wfs-fill', async (e) => {
+        const f = e.features?.[0];
+        if (!f) return;
+
+        const type  = lastType;
+        const props = f.properties;
+        const rows  = featureProps(type, props).filter(([, v]) => v != null && v !== '');
+
+        // Récupérer la date ortho — code_dep direct si dispo, sinon préfixe du code_insee
+        let codeDep = props.code_dep ?? null;
+        if (!codeDep && props.code_insee) {
+            const insee = String(props.code_insee);
+            codeDep = ['971','972','973','974','976'].some(d => insee.startsWith(d))
+                ? insee.slice(0, 3)
+                : insee.slice(0, 2);
+        }
+        // Pour les départements, code_dep = code_insee directement
+        if (type === 'departements') codeDep = props.code_insee;
+
+        let orthoHtml = '';
+        if (codeDep) {
+            const annee = await getOrthoAnnee(codeDep);
+            const sel = document.getElementById('ign-campagne-ctrl');
+            const camp = sel?.options[sel.selectedIndex]?.text || '';
+            if (annee) orthoHtml = `<div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,.1);font-size:11px;color:#555">
+                📸 Ortho <strong>${camp}</strong> : <strong>${annee}</strong>
+            </div>`;
+        }
+
+        const tableRows = rows.map(([l, v]) =>
+            `<tr><td style="color:#888;font-size:11px;padding:2px 8px 2px 0;white-space:nowrap">${l}</td>
+             <td style="font-size:12px;font-weight:500;padding:2px 0">${v}</td></tr>`
+        ).join('');
+
+        const html = `<div style="min-width:160px">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#003189;margin-bottom:5px">${TYPE_LABEL[type] ?? type}</div>
+            <table style="border-collapse:collapse;width:100%">${tableRows}</table>
+            ${orthoHtml}
+        </div>`;
+
+        if (_popup) _popup.remove();
+        _popup = new maplibregl.Popup({ closeButton: true, maxWidth: '260px' })
+            .setLngLat(e.lngLat)
+            .setHTML(html)
+            .addTo(map);
+    });
+
+    map.on('mouseenter', 'wfs-fill', () => {
+        map.getCanvas().style.cursor = 'pointer';
+    });
+
+    map.on('mouseleave', 'wfs-fill', () => {
+        map.getCanvas().style.cursor = '';
+    });
 }

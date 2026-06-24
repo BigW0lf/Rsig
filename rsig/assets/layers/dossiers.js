@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop } from '../utils.js';
+import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop, apiFetch } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow, irowHtml } from '../panel.js';
 
@@ -8,7 +8,7 @@ let loaded = false;
 export function loadDossiers(map) {
     if (!active || loaded) return;
     showSpinner();
-    fetch('/api/crm/geojson')
+    apiFetch('/api/crm/geojson')
         .then(r => r.json())
         .then(fc => {
             hideSpinner();
@@ -57,7 +57,7 @@ export function loadDossiers(map) {
                 });
             });
         })
-        .catch(e => { hideSpinner(); console.error('dossiers', e); });
+        .catch(e => { hideSpinner(); });
 }
 
 export function initDossiers(map) {

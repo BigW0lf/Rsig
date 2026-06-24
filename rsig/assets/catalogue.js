@@ -7,6 +7,7 @@ import { setLegendVisible } from './legend.js';
 
 // ── Icônes SVG ─────────────────────────────────────────────────────────────
 const ICONS = {
+    ortho:      'M3 3h18v18H3zM3 9h18M9 21V9',
     taux:       'M2 20h20M5 20V10m4 10V4m4 16v-7m4 7V8',
     coeff:      'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 22V12h6v10',
     cfe:        'M2 7h20v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7zM16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2M12 12v4M10 14h4',
@@ -66,6 +67,7 @@ const CATALOGUE = [
         layers: [
             { id: 'dossiers', mapPrefix: 'dossiers', label: 'Dossiers',       optionsId: null, desc: 'Dossiers CRM géolocalisés' },
             { id: 'zfu',      mapPrefix: 'zfu',      label: 'ZFU — Exo. TSB', optionsId: null, desc: 'Zones franches urbaines — exonération TSB' },
+            { id: 'ortho',    mapPrefix: null,        label: 'Ortho historique IGN', optionsId: null, desc: 'Campagnes d\'acquisition 2000-2025 + millésimes par département' },
         ],
     },
 ];
@@ -360,6 +362,22 @@ function switchTab(tab) {
     if (!isRep) refreshCouchesPane();
 }
 
+// ── Tracking couches ───────────────────────────────────────────────────────
+let _trackTimer = null;
+function trackLayers() {
+    clearTimeout(_trackTimer);
+    _trackTimer = setTimeout(() => {
+        const active = CATALOGUE.flatMap(g => g.layers)
+            .filter(l => { const cb = getToggle(l.id); return cb?.checked; })
+            .map(l => l.id);
+        fetch('/api/track/layers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ layers: active }),
+        }).catch(e => console.warn('[catalogue] track', e));
+    }, 3000);
+}
+
 // ── Observe checkboxes ─────────────────────────────────────────────────────
 function observeToggles() {
     CATALOGUE.flatMap(g => g.layers).forEach(layer => {
@@ -369,6 +387,7 @@ function observeToggles() {
             updateBadge();
             syncRepertoireButtons();
             if (_activeTab === 'couches') refreshCouchesPane();
+            trackLayers();
         });
     });
 }

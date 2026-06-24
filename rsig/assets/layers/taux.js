@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop } from '../utils.js';
+import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop, apiFetch } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 
@@ -32,10 +32,10 @@ function fetchLayer(url, onData) {
     if (abortCtrl) abortCtrl.abort();
     abortCtrl = new AbortController();
     showSpinner();
-    fetch(url, { signal: abortCtrl.signal })
+    apiFetch(url, { signal: abortCtrl.signal })
         .then(r => r.json())
         .then(d => { hideSpinner(); onData(d); })
-        .catch(e => { hideSpinner(); if (e.name !== 'AbortError') console.error('taux', e); });
+        .catch(e => { hideSpinner(); });
 }
 
 function upsert(map, fc, color) {
@@ -103,7 +103,8 @@ export function initTaux(map) {
             if (!ms?.length) return;
             millesimeEl.innerHTML = ms.map(m => `<option value="${m}">${m}</option>`).join('');
             if (active) loadTaux(map);
-        });
+        })
+        .catch(e => console.warn('[taux] millesimes', e));
 
     toggle.addEventListener('change', () => {
         active = toggle.checked;

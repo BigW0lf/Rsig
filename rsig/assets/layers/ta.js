@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, stepExpr, computeBreaks, PAL, bddOnTop } from '../utils.js';
+import { showSpinner, hideSpinner, stepExpr, computeBreaks, PAL, bddOnTop, apiFetch } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 
@@ -91,7 +91,7 @@ export function loadTa(map) {
             upsert(map, deptCache.fc, propForZoom(champ, true));
             return;
         }
-        fetch(`/api/ta/departements?annee=${annee}`, { signal: abortCtrl.signal })
+        apiFetch(`/api/ta/departements?annee=${annee}`, { signal: abortCtrl.signal })
             .then(r => r.json())
             .then(fc => {
                 hideSpinner();
@@ -99,13 +99,13 @@ export function loadTa(map) {
                 deptCache = { fc, annee };
                 upsert(map, fc, propForZoom(champ, true));
             })
-            .catch(e => { hideSpinner(); if (e.name !== 'AbortError') console.error('ta', e); });
+            .catch(e => { hideSpinner(); });
     } else {
         const milParam = milUnion ? `&millesime=${milUnion}` : '';
         const url = mode === 'union'
             ? `/api/ta/union?bbox=${bboxParam(map)}&annee=${annee}${milParam}`
             : `/api/ta?bbox=${bboxParam(map)}&annee=${annee}`;
-        fetch(url, { signal: abortCtrl.signal })
+        apiFetch(url, { signal: abortCtrl.signal })
             .then(r => r.json())
             .then(fc => {
                 hideSpinner();
@@ -116,7 +116,7 @@ export function loadTa(map) {
                 }
                 upsert(map, fc, propForZoom(champ, false));
             })
-            .catch(e => { hideSpinner(); if (e.name !== 'AbortError') console.error('ta', e); });
+            .catch(e => { hideSpinner(); });
     }
 }
 
@@ -138,7 +138,7 @@ export function initTa(map) {
                 opt.value = m; opt.textContent = m;
                 milUnionSel.appendChild(opt);
             });
-        }).catch(() => {});
+        }).catch(e => console.warn('[ta] millesimes', e));
         milUnionSel.addEventListener('change', () => { if (active) loadTa(map); });
     }
 
@@ -193,10 +193,10 @@ export function initTa(map) {
                 irow('Forfait stationnement', fmtV(p.val_forfait_station)) +
                 irow('Date délibération', p.date_effet || null) +
                 (exoRows ? '<div class="info-section-sep">Exonérations votées</div><div class="info-section">' + exoRows + '</div>' : '') +
-                `<div class="info-row" style="margin-top:6px">
-                    <a href="https://www.impots.gouv.fr/portail/particulier/taxe-damenagement" target="_blank"
-                       style="color:var(--blue);font-size:0.78rem">→ Déclaration TA (DGFiP)</a>
-                </div>`
+                (p.libcom ? `<div class="info-row" style="margin-top:6px">
+                    <a href="https://www.google.fr/search?q=${encodeURIComponent('"' + p.libcom + '" délibération "taxe d\'aménagement" filetype:pdf')}" target="_blank" rel="noopener"
+                       style="color:var(--blue);font-size:0.78rem">→ Délibération TA — ${p.libcom}</a>
+                </div>` : '')
             );
         }
     });

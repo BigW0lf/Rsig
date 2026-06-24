@@ -1,6 +1,13 @@
 <?php
 
+define('DB_FLAG_PATH', __DIR__ . '/../../db_offline.flag');
+
+function isDbOffline(): bool {
+    return file_exists(DB_FLAG_PATH);
+}
+
 function getDb(): ?PDO {
+    if (isDbOffline()) return null;
     try {
         return new PDO(DB_DSN, DB_USER, DB_PASS, [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
@@ -50,6 +57,25 @@ function validateAnnee(string $annee): string {
 
 function validateMillesime(string $m): string {
     return (preg_match('/^\d{4}$/', $m) && (int)$m >= 2010 && (int)$m <= 2035) ? $m : '2025';
+}
+
+// ── Cache fichier JSON (TTL en secondes) ─────────────────────────────────────
+define('CACHE_DIR', __DIR__ . '/../../cache/');
+
+function cacheGet(string $key): mixed {
+    $f = CACHE_DIR . md5($key) . '.json';
+    if (!file_exists($f)) return null;
+    $data = json_decode(file_get_contents($f), true);
+    if (!$data || $data['expires'] < time()) { @unlink($f); return null; }
+    return $data['payload'];
+}
+
+function cacheSet(string $key, mixed $payload, int $ttl = 300): void {
+    if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0755, true);
+    file_put_contents(
+        CACHE_DIR . md5($key) . '.json',
+        json_encode(['expires' => time() + $ttl, 'payload' => $payload])
+    );
 }
 
 const TAUX_CHAMPS = [

@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, bddOnTop } from '../utils.js';
+import { showSpinner, hideSpinner, bddOnTop, apiFetch } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 
@@ -18,7 +18,7 @@ let loaded   = false;
 let fcCache  = null;
 let ctrl     = null;
 
-const millesimesReady = fetch('/api/tass/millesimes').then(r => r.json()).catch(() => [2026]);
+const millesimesReady = fetch('/api/tass/millesimes').then(r => r.json()).catch(e => { console.warn('[tass] millesimes', e); return [2026]; });
 const tarifsCache = {};
 
 function getTarifs(mil) {
@@ -26,7 +26,7 @@ function getTarifs(mil) {
     return fetch(`/api/tass/tarifs?millesime=${mil}`)
         .then(r => r.json())
         .then(d => { tarifsCache[mil] = d.tarifs || []; return tarifsCache[mil]; })
-        .catch(() => []);
+        .catch(e => { console.warn('[tass] tarifs', e); return []; });
 }
 
 function getMillesime() {
@@ -74,10 +74,10 @@ function load(map) {
 
     if (ctrl) ctrl.abort();
     ctrl = new AbortController();
-    fetch('/api/tass', { signal: ctrl.signal })
+    apiFetch('/api/tass', { signal: ctrl.signal })
         .then(r => r.json())
         .then(fc => { fcCache = fc; doRender(fc); })
-        .catch(e => { hideSpinner(); if (e.name !== 'AbortError') console.error('tass', e); });
+        .catch(e => { hideSpinner(); });
 }
 
 function remove(map) {

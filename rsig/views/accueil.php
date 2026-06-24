@@ -34,9 +34,173 @@
     <?php else: ?>
     <a href="#" data-page="donnees" style="margin-left:auto">Données</a>
     <?php endif; ?>
-    <span class="nav-user"><?= htmlspecialchars($_SESSION['user_name'] ?? '') ?></span>
-    <a href="/auth/logout" class="nav-logout" title="Déconnexion">&#x2715;</a>
+    <div style="display:flex;align-items:center;gap:4px;margin-left:auto">
+        <button onclick="window.copyPermalink?.()" title="Copier le lien de cette vue" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:background .15s" onmouseover="this.style.background='rgba(255,255,255,.28)'" onmouseout="this.style.background='rgba(255,255,255,.15)'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </button>
+        <button onclick="openModal('modal-aide')" title="Aide" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:background .15s" onmouseover="this.style.background='rgba(255,255,255,.28)'" onmouseout="this.style.background='rgba(255,255,255,.15)'">?</button>
+        <button onclick="openModal('modal-apropos')" title="À propos" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:background .15s" onmouseover="this.style.background='rgba(255,255,255,.28)'" onmouseout="this.style.background='rgba(255,255,255,.15)'">i</button>
+        <span class="nav-user"><?= htmlspecialchars($_SESSION['user_name'] ?? '') ?></span>
+        <a href="/auth/logout" class="nav-logout" title="Déconnexion">&#x2715;</a>
+    </div>
 </nav>
+
+<!-- ═══ MODAL AIDE ══════════════════════════════════════════ -->
+<div id="modal-aide" class="rsig-modal" style="display:none" onclick="if(event.target===this)closeModal('modal-aide')">
+    <div class="rsig-modal-box">
+        <div class="rsig-modal-head">
+            <span>Aide — RSig</span>
+            <button onclick="closeModal('modal-aide')">✕</button>
+        </div>
+        <div class="rsig-modal-body">
+
+            <div class="rsig-help-section">
+                <div class="rsig-help-title">Navigation sur la carte</div>
+                <div class="rsig-help-row"><kbd>Scroll</kbd><span>Zoom avant / arrière</span></div>
+                <div class="rsig-help-row"><kbd>Clic gauche + glisser</kbd><span>Déplacer la carte</span></div>
+                <div class="rsig-help-row"><kbd>Ctrl + Scroll</kbd><span>Zoom précis</span></div>
+                <div class="rsig-help-row"><kbd>+</kbd> / <kbd>−</kbd><span>Boutons zoom (haut droite)</span></div>
+            </div>
+
+            <div class="rsig-help-section">
+                <div class="rsig-help-title">Couches de données</div>
+                <div class="rsig-help-row"><span style="font-weight:600">Répertoire</span><span>Parcourez et ajoutez des couches via l'onglet gauche</span></div>
+                <div class="rsig-help-row"><span style="font-weight:600">Œil</span><span>Masquer / afficher une couche temporairement</span></div>
+                <div class="rsig-help-row"><span style="font-weight:600">×</span><span>Retirer une couche des couches actives</span></div>
+                <div class="rsig-help-row"><span style="font-weight:600">Chevron ›</span><span>Déployer les options de la couche</span></div>
+            </div>
+
+            <div class="rsig-help-section">
+                <div class="rsig-help-title">Fond de carte IGN</div>
+                <div class="rsig-help-row"><span>Menu déroulant bas droite</span><span>Changer la campagne d'acquisition ortho (2000 → actuelle)</span></div>
+                <div class="rsig-help-row"><span>Couche <em>Ortho historique IGN</em></span><span>Active l'overlay millésimes par département avec légende</span></div>
+            </div>
+
+            <div class="rsig-help-section">
+                <div class="rsig-help-title">Informations sur un objet</div>
+                <div class="rsig-help-row"><span>Clic sur la carte</span><span>Affiche un popup avec les infos du département / commune / section / parcelle selon le zoom, ainsi que la date d'acquisition de l'ortho</span></div>
+            </div>
+
+            <div class="rsig-help-section">
+                <div class="rsig-help-title">Recherche d'adresse</div>
+                <div class="rsig-help-row"><span>Barre de recherche</span><span>Géocodage IGN — saisissez une adresse, une commune ou un code INSEE</span></div>
+            </div>
+
+            <div class="rsig-help-section">
+                <div class="rsig-help-title">Pages secondaires</div>
+                <div class="rsig-help-row"><span>Requêtes</span><span>Exécuter des requêtes SQL SELECT sur la base</span></div>
+                <div class="rsig-help-row"><span>BOFIP</span><span>Parser les tarifs depuis les pages BOFIP</span></div>
+                <div class="rsig-help-row"><span>Données</span><span>Explorateur de tables + mise à jour Taxe d'Aménagement</span></div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- ═══ MODAL À PROPOS ═════════════════════════════════════ -->
+<div id="modal-apropos" class="rsig-modal" style="display:none" onclick="if(event.target===this)closeModal('modal-apropos')">
+    <div class="rsig-modal-box">
+        <div class="rsig-modal-head">
+            <span>À propos — RSig</span>
+            <button onclick="closeModal('modal-apropos')">✕</button>
+        </div>
+        <div class="rsig-modal-body">
+
+            <div style="text-align:center;padding:8px 0 20px">
+                <div style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;background:var(--blue);border-radius:12px;margin-bottom:10px">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="white" stroke-width="1.5"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10A15.3 15.3 0 0 1 8 12 15.3 15.3 0 0 1 12 2z" stroke="white" stroke-width="1.5"/></svg>
+                </div>
+                <div style="font-size:1.15rem;font-weight:700;color:var(--text)">RSig</div>
+                <div style="font-size:0.8rem;color:var(--text3);margin-top:2px">Référentiel SIG interne — RTaxes</div>
+            </div>
+
+            <div class="rsig-help-section">
+                <div class="rsig-help-title">Application</div>
+                <div class="rsig-help-row"><span>Objet</span><span>Consultation et analyse des données fiscales foncières géolocalisées</span></div>
+                <div class="rsig-help-row"><span>Hébergement</span><span>VPS OVH — rcarto.rtaxes-geometre-expert.fr</span></div>
+                <div class="rsig-help-row"><span>Accès</span><span>Authentification Microsoft (compte RTaxes)</span></div>
+            </div>
+
+            <div class="rsig-help-section">
+                <div class="rsig-help-title">Données</div>
+                <div class="rsig-help-row"><span>Orthophotographies</span><span>IGN Géoplateforme — campagnes 2000 à 2025</span></div>
+                <div class="rsig-help-row"><span>Cadastre</span><span>IGN — Parcellaire Express (WFS temps réel)</span></div>
+                <div class="rsig-help-row"><span>Taux fiscaux</span><span>DGFIP — TFPB, TFPNB, millésimes 2017-2025</span></div>
+                <div class="rsig-help-row"><span>Taxe d'Aménagement</span><span>API data.economie.gouv.fr — mise à jour automatique</span></div>
+                <div class="rsig-help-row"><span>TSB / TASS</span><span>BOFIP (parser interne)</span></div>
+                <div class="rsig-help-row"><span>CRM</span><span>Microsoft Dynamics 365 — dossiers et sites RTaxes</span></div>
+            </div>
+
+            <div class="rsig-help-section">
+                <div class="rsig-help-title">Développement</div>
+                <div class="rsig-help-row"><span>Développeur</span><span>Jules Faguet</span></div>
+                <div class="rsig-help-row"><span>Backend</span><span>PHP 8.3 + Flight — PostgreSQL 17 + PostGIS 3.5</span></div>
+                <div class="rsig-help-row"><span>Frontend</span><span>MapLibre GL JS — vanilla JS ES modules</span></div>
+                <div class="rsig-help-row"><span>Infrastructure</span><span>Docker Compose — Nginx — Let's Encrypt</span></div>
+            </div>
+
+            <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text3)">
+                © <?= date('Y') ?> RTaxes — Usage interne exclusif
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<style>
+.rsig-modal {
+    position: fixed; inset: 0; z-index: 2000;
+    background: rgba(0,0,0,.45);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+}
+.rsig-modal-box {
+    background: var(--surface);
+    border-radius: 10px;
+    width: 100%; max-width: 520px;
+    max-height: 85vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0,0,0,.22);
+    overflow: hidden;
+}
+.rsig-modal-head {
+    background: var(--blue);
+    color: #fff;
+    padding: 12px 16px;
+    font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+}
+.rsig-modal-head button {
+    background: rgba(255,255,255,.2); border: none; color: #fff;
+    width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+    font-size: 13px; display: flex; align-items: center; justify-content: center;
+    transition: background .15s;
+}
+.rsig-modal-head button:hover { background: rgba(255,255,255,.35); }
+.rsig-modal-body { overflow-y: auto; padding: 16px; }
+.rsig-help-section { margin-bottom: 16px; }
+.rsig-help-section:last-child { margin-bottom: 0; }
+.rsig-help-title {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--text3);
+    border-bottom: 1px solid var(--border2); padding-bottom: 4px; margin-bottom: 8px;
+}
+.rsig-help-row {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 4px 0; font-size: 12px;
+    border-bottom: 1px solid var(--border2);
+}
+.rsig-help-row:last-child { border-bottom: none; }
+.rsig-help-row > span:first-child { flex-shrink: 0; min-width: 140px; color: var(--text2); font-weight: 500; }
+.rsig-help-row > span:last-child  { color: var(--text); }
+kbd {
+    display: inline-block; padding: 1px 6px; font-size: 11px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 3px; font-family: monospace; white-space: nowrap;
+    flex-shrink: 0; min-width: 140px; text-align: center;
+}
+</style>
 
 <!-- Iframes pages secondaires -->
 <div id="page-overlay" style="display:none;position:fixed;top:48px;left:0;right:0;bottom:0;z-index:100;flex-direction:column">
@@ -52,6 +216,15 @@
     <!-- ═══ PANNEAU GAUCHE ══════════════════════════════════ -->
     <aside id="panel-left">
         <div class="panel-left-head">Couches</div>
+
+        <!-- Ortho historique IGN -->
+        <div class="layer-row">
+            <label class="layer-toggle">
+                <input type="checkbox" id="toggle-ortho">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M9 21V9"/></svg>
+                Ortho historique IGN
+            </label>
+        </div>
 
         <!-- Fond cadastral IGN (informatif) -->
         <div class="layer-row">
@@ -327,9 +500,13 @@
 
     <!-- ═══ CARTE ════════════════════════════════════════════ -->
     <div id="map-wrap">
+        <div id="db-offline-banner" style="display:none;position:absolute;top:0;left:0;right:0;z-index:2000;background:#b91c1c;color:#fff;text-align:center;padding:7px 12px;font-size:13px;font-weight:600;letter-spacing:.02em;pointer-events:none;">
+            ⚠ Base de données déconnectée — les couches de données fiscales sont indisponibles
+        </div>
         <div id="map"></div>
         <div id="search-wrap">
             <input type="search" id="search" placeholder="🔍 Rechercher une adresse…" autocomplete="off">
+            <button id="search-clear" title="Effacer" style="display:none">✕</button>
             <div id="resultats" class="dropdown"></div>
         </div>
         <div id="legend" class="hidden">
@@ -355,40 +532,153 @@
 <script type="module" src="assets/map.js"></script>
 <script>
 // ── Recherche géocodage ──────────────────────────────────
+const HIST_KEY = 'rsig_search_history';
+const HIST_MAX = 8;
+
+function histLoad() {
+    try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { return []; }
+}
+function histAdd(entry) {
+    let h = histLoad().filter(e => e.label !== entry.label);
+    h.unshift(entry);
+    if (h.length > HIST_MAX) h = h.slice(0, HIST_MAX);
+    localStorage.setItem(HIST_KEY, JSON.stringify(h));
+}
+function histRemove(label) {
+    localStorage.setItem(HIST_KEY, JSON.stringify(histLoad().filter(e => e.label !== label)));
+}
+
 let searchTimer;
+let _currentResults = []; // [{label, lat, lon, class}]
+let _focusIdx = -1;
 const input    = document.getElementById('search');
 const dropdown = document.getElementById('resultats');
+const clearBtn = document.getElementById('search-clear');
+
+function renderDropdown(items, isHistory) {
+    _focusIdx = -1;
+    dropdown.innerHTML = '';
+    if (!items.length) return;
+    if (isHistory) {
+        const hdr = document.createElement('div');
+        hdr.style.cssText = 'padding:4px 12px 2px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);background:var(--surface2)';
+        hdr.textContent = 'Recherches récentes';
+        dropdown.appendChild(hdr);
+    }
+    items.forEach((r, i) => {
+        const row = document.createElement('div');
+        row.className = 'item search-item';
+        row.dataset.idx = i;
+        row.innerHTML = isHistory
+            ? `<span style="opacity:.45;margin-right:6px;font-size:11px">🕐</span><span style="flex:1">${escHtml(r.label)}</span><button class="hist-del" data-label="${escHtml(r.label)}" title="Supprimer">✕</button>`
+            : escHtml(r.label);
+        row.addEventListener('mousedown', ev => {
+            if (ev.target.classList.contains('hist-del')) {
+                ev.preventDefault();
+                histRemove(ev.target.dataset.label);
+                renderDropdown(histLoad(), true);
+                return;
+            }
+            ev.preventDefault();
+            selectResult(r);
+        });
+        dropdown.appendChild(row);
+    });
+    _currentResults = items;
+}
+
+function selectResult(r) {
+    input.value = r.label;
+    clearBtn.style.display = 'flex';
+    dropdown.innerHTML = '';
+    _focusIdx = -1;
+    histAdd(r);
+    afficherSurCarte(r.lat, r.lon, r.class);
+}
+
+function closeDropdown() {
+    dropdown.innerHTML = '';
+    _focusIdx = -1;
+}
+
+input.addEventListener('focus', () => {
+    if (!input.value.trim()) {
+        const h = histLoad();
+        if (h.length) renderDropdown(h, true);
+    }
+});
 
 input.addEventListener('input', function () {
     clearTimeout(searchTimer);
     const val = this.value.trim();
-    if (!val) { dropdown.innerHTML = ''; return; }
+    clearBtn.style.display = val ? 'flex' : 'none';
+    if (!val) { renderDropdown(histLoad(), true); return; }
     searchTimer = setTimeout(() => {
         fetch('/search?barre=' + encodeURIComponent(val))
             .then(r => r.json())
             .then(data => {
-                dropdown.innerHTML = '';
                 if (!data.results?.length) {
-                    dropdown.innerHTML = "<div class='item'>Aucun résultat</div>";
-                    return;
+                    dropdown.innerHTML = "<div class='item' style='color:var(--text3)'>Aucun résultat</div>";
+                    _currentResults = [];
+                } else {
+                    renderDropdown(data.results, false);
                 }
-                data.results.forEach(r => {
-                    const div = document.createElement('div');
-                    div.className   = 'item';
-                    div.textContent = r.label;
-                    div.addEventListener('click', () => {
-                        input.value        = r.label;
-                        dropdown.innerHTML = '';
-                        afficherSurCarte(r.lat, r.lon, r.class);
-                    });
-                    dropdown.appendChild(div);
-                });
             }).catch(() => {});
-    }, 400);
+    }, 300);
+});
+
+input.addEventListener('keydown', e => {
+    const items = dropdown.querySelectorAll('.search-item');
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _focusIdx = Math.min(_focusIdx + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _focusIdx = Math.max(_focusIdx - 1, 0);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const idx = _focusIdx >= 0 ? _focusIdx : 0;
+        if (_currentResults[idx]) selectResult(_currentResults[idx]);
+        return;
+    } else if (e.key === 'Escape') {
+        closeDropdown();
+        input.blur();
+        return;
+    } else { return; }
+    items.forEach((el, i) => el.classList.toggle('item-focused', i === _focusIdx));
+    if (_focusIdx >= 0) input.value = _currentResults[_focusIdx]?.label ?? input.value;
+});
+
+clearBtn.addEventListener('click', () => {
+    input.value = '';
+    clearBtn.style.display = 'none';
+    closeDropdown();
+    window.clearSearchMarker?.();
+    input.focus();
+    const h = histLoad();
+    if (h.length) renderDropdown(h, true);
 });
 
 document.addEventListener('click', e => {
-    if (!e.target.closest('#search-wrap')) dropdown.innerHTML = '';
+    if (!e.target.closest('#search-wrap')) closeDropdown();
+});
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── Modales Aide / À propos ──────────────────────────────
+function openModal(id) {
+    const m = document.getElementById(id);
+    if (m) { m.style.display = 'flex'; }
+}
+function closeModal(id) {
+    const m = document.getElementById(id);
+    if (m) { m.style.display = 'none'; }
+}
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        ['modal-aide','modal-apropos'].forEach(closeModal);
+    }
 });
 
 // ── Navigation SPA ───────────────────────────────────────
@@ -431,6 +721,19 @@ window.addEventListener('load', () => {
     if (initPage !== 'carte') showPage(initPage);
     else history.replaceState({ page: 'carte' }, '', location.pathname);
 });
+
+// ── Banner BDD offline ───────────────────────────────────
+(function pollDbStatus() {
+    const banner = document.getElementById('db-offline-banner');
+    if (!banner) return;
+    function check() {
+        fetch('/api/db/status').then(r => r.ok ? r.json() : null).then(d => {
+            if (d) banner.style.display = d.offline ? 'block' : 'none';
+        }).catch(() => {});
+    }
+    check();
+    setInterval(check, 30000);
+})();
 </script>
 </body>
 </html>

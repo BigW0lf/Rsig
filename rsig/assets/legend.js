@@ -23,7 +23,7 @@ export function setLegendVisible(key, visible) {
 }
 
 function _render() {
-    const keys = ['taux', 'sections', 'coeff', 'cfe', 'tf', 'ta', 'ta-majore', 'tarifs', 'tsb-IDF', 'tsb-PACA', 'tass', 'zfu', 'dossiers'].filter(k => state[k] && !hidden.has(k));
+    const keys = ['taux', 'sections', 'coeff', 'cfe', 'tf', 'ta', 'ta-majore', 'tarifs', 'tsb-idf', 'tsb-paca', 'tass', 'zfu', 'dossiers'].filter(k => state[k] && !hidden.has(k));
     if (!keys.length) { legendEl.classList.add('hidden'); return; }
     legendItems.innerHTML = keys.map(k => {
         const { title, breaks, pal, suffix } = state[k];

@@ -1,6 +1,31 @@
 <?php
 require_once __DIR__ . '/../crm_sync.php';
 
+// ── Statut BDD (admin) ───────────────────────────────────────────────────────
+Flight::route('GET /api/db/status', function () {
+    requireAdmin();
+    $offline = isDbOffline();
+    $canConnect = false;
+    if (!$offline) {
+        try { new PDO(DB_DSN, DB_USER, DB_PASS); $canConnect = true; } catch (PDOException) {}
+    }
+    Flight::json(['offline' => $offline, 'reachable' => $canConnect]);
+});
+
+Flight::route('POST /api/db/offline', function () {
+    requireAdmin();
+    if (!file_exists(DB_FLAG_PATH)) {
+        file_put_contents(DB_FLAG_PATH, date('Y-m-d H:i:s'));
+    }
+    Flight::json(['offline' => true]);
+});
+
+Flight::route('POST /api/db/online', function () {
+    requireAdmin();
+    if (file_exists(DB_FLAG_PATH)) unlink(DB_FLAG_PATH);
+    Flight::json(['offline' => false]);
+});
+
 // ── Sync CRM → miroir PostgreSQL (lance en arrière-plan) ──
 Flight::route('POST /api/crm/sync', function () {
     $db = getDb();
@@ -154,7 +179,8 @@ Flight::route('POST /api/query', function () {
         $cols = $rows ? array_keys($rows[0]) : [];
         Flight::json(['cols' => $cols, 'rows' => $rows, 'count' => count($rows)]);
     } catch (PDOException $e) {
-        Flight::json(['error' => $e->getMessage()], 500);
+        error_log('[rsig] SQL error: ' . $e->getMessage());
+        Flight::json(['error' => 'Erreur base de données'], 500);
     }
 });
 
@@ -294,7 +320,8 @@ Flight::route('POST /api/sql', function () {
         $stmt->execute();
         Flight::json(['message' => $stmt->rowCount() . ' ligne(s) affectée(s).']);
     } catch (PDOException $e) {
-        Flight::json(['error' => $e->getMessage()], 500);
+        error_log('[rsig] SQL error: ' . $e->getMessage());
+        Flight::json(['error' => 'Erreur base de données'], 500);
     }
 });
 
@@ -305,6 +332,12 @@ Flight::route('POST /api/upload-csv', function () {
     if ($file['error'] !== UPLOAD_ERR_OK) { Flight::json(['error' => 'Erreur upload'], 400); return; }
     if (strtolower(pathinfo($file['name'], PATHINFO_EXTENSION)) !== 'csv') {
         Flight::json(['error' => 'Seuls les fichiers CSV sont acceptés'], 400); return;
+    }
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mime  = finfo_file($finfo, $file['tmp_name']);
+    finfo_close($finfo);
+    if (!in_array($mime, ['text/plain', 'text/csv', 'application/csv', 'application/octet-stream'])) {
+        Flight::json(['error' => 'Type MIME invalide : ' . $mime], 400); return;
     }
     $nifiDir = __DIR__ . '/../../nifi-drop/';
     if (!is_dir($nifiDir)) mkdir($nifiDir, 0755, true);
@@ -379,6 +412,8 @@ Flight::route('GET /api/taux/stats', function () {
 Flight::route('GET /api/taux/departements', function () {
     $champ     = validateChamp(Flight::request()->query['champ'] ?? '', TAUX_CHAMPS, 'taux_fb_commune_vote');
     $millesime = validateMillesime(Flight::request()->query['millesime'] ?? '2025');
+    $cacheKey  = "taux_dept_{$champ}_{$millesime}";
+    if ($cached = cacheGet($cacheKey)) { Flight::json($cached); return; }
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
                    ROUND(AVG(tc.$champ::numeric)::numeric, 4) AS valeur_affichee,
@@ -389,7 +424,9 @@ Flight::route('GET /api/taux/departements', function () {
             GROUP BY d.code_insee, d.nom_officiel, d.geom";
     $stmt = $db->prepare($sql);
     $stmt->execute([':millesime' => $millesime]);
-    Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
+    $result = ['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)];
+    cacheSet($cacheKey, $result);
+    Flight::json($result);
 });
 
 // ── CFE ──────────────────────────────────────────────────
@@ -422,17 +459,19 @@ Flight::route('GET /api/cfe/stats', function () {
 });
 
 Flight::route('GET /api/cfe/departements', function () {
-    $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $cat = Flight::request()->query['categorie'] ?? '';
     if (!$cat || !preg_match('/^[A-Z]{3}[0-9]$/', $cat)) { Flight::json(['error' => 'categorie requise'], 400); return; }
-    $annee = validateAnnee(Flight::request()->query['annee'] ?? '');
+    $annee    = validateAnnee(Flight::request()->query['annee'] ?? '');
+    $cacheKey = "cfe_dept_{$cat}_{$annee}";
+    if ($cached = cacheGet($cacheKey)) { Flight::json($cached); return; }
+    $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $col   = "val_$annee";
     $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
                    ROUND(AVG(v.indicateur_cfe_m2 * t_avg.tarif)::numeric,4) AS cfe_estime,
                    ROUND(AVG(t_avg.tarif)::numeric,2) AS tarif_moyen,
                    ST_AsGeoJSON(ST_SimplifyPreserveTopology(d.geom,0.01),4)::text AS geojson
             FROM departements_geom_4326 d
-            JOIN cfe_calcul v ON LEFT(v.code_insee,2) = d.code_insee
+            JOIN cfe_calcul v ON LPAD(LEFT(v.code_insee,2),2,'0') = d.code_insee
             JOIN (
                 SELECT left(s.code_insee,5) AS code_insee, AVG(t.$col::numeric) AS tarif
                 FROM sections_2025 s
@@ -441,13 +480,15 @@ Flight::route('GET /api/cfe/departements', function () {
                  AND t.num_secteur = s.secteur AND t.categorie = :cat
                 WHERE t.$col IS NOT NULL
                 GROUP BY left(s.code_insee,5)
-            ) t_avg ON v.code_insee = t_avg.code_insee
+            ) t_avg ON LPAD(v.code_insee,5,'0') = t_avg.code_insee
             WHERE v.indicateur_cfe_m2 IS NOT NULL
             GROUP BY d.code_insee, d.nom_officiel, d.geom";
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':cat', $cat);
     $stmt->execute();
-    Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
+    $result = ['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)];
+    cacheSet($cacheKey, $result);
+    Flight::json($result);
 });
 
 Flight::route('GET /api/cfe', function () {
@@ -467,7 +508,7 @@ Flight::route('GET /api/cfe', function () {
             JOIN tarifs_pivot t
                 ON t.dep = CASE WHEN s.code_dep='97' THEN left(s.code_insee,3) ELSE s.code_dep END
                AND t.num_secteur = s.secteur AND t.categorie = :cat AND t.$col IS NOT NULL
-            JOIN cfe_calcul v ON v.code_insee = s.code_insee
+            JOIN cfe_calcul v ON LPAD(v.code_insee,5,'0') = s.code_insee
             WHERE ST_Intersects(s.geom, ST_Transform(ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326),2154))
               AND v.indicateur_cfe_m2 IS NOT NULL
             LIMIT 5000";
@@ -481,17 +522,19 @@ Flight::route('GET /api/cfe', function () {
 
 // ── TF estimée €/m² ──────────────────────────────────────
 Flight::route('GET /api/tf/departements', function () {
-    $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $cat = Flight::request()->query['categorie'] ?? '';
     if (!$cat || !preg_match('/^[A-Z]{3}[0-9]$/', $cat)) { Flight::json(['error' => 'categorie requise'], 400); return; }
-    $annee = validateAnnee(Flight::request()->query['annee'] ?? '');
+    $annee    = validateAnnee(Flight::request()->query['annee'] ?? '');
+    $cacheKey = "tf_dept_{$cat}_{$annee}";
+    if ($cached = cacheGet($cacheKey)) { Flight::json($cached); return; }
+    $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $col   = "val_$annee";
     $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
                    ROUND(AVG(v.indicateur_tf_m2 * t_avg.tarif)::numeric,4) AS tf_estime,
                    ROUND(AVG(t_avg.tarif)::numeric,2) AS tarif_moyen,
                    ST_AsGeoJSON(ST_SimplifyPreserveTopology(d.geom,0.01),4)::text AS geojson
             FROM departements_geom_4326 d
-            JOIN tf_calcul v ON LEFT(v.code_insee,2) = d.code_insee AND v.millesime = :annee
+            JOIN tf_calcul v ON LPAD(LEFT(v.code_insee,2),2,'0') = d.code_insee AND v.millesime = :annee
             JOIN (
                 SELECT left(s.code_insee,5) AS code_insee, AVG(t.$col::numeric) AS tarif
                 FROM sections_2025 s
@@ -507,7 +550,9 @@ Flight::route('GET /api/tf/departements', function () {
     $stmt->bindValue(':cat', $cat);
     $stmt->bindValue(':annee', (int)$annee, PDO::PARAM_INT);
     $stmt->execute();
-    Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
+    $result = ['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)];
+    cacheSet($cacheKey, $result);
+    Flight::json($result);
 });
 
 Flight::route('GET /api/tf', function () {
@@ -866,7 +911,7 @@ Flight::route('GET /api/ta/departements', function () {
                    ROUND(AVG(COALESCE(t.taux_com,0) + COALESCE(t.taux_dep,0) + COALESCE(t.taux_reg,0))::numeric,3) AS taux_total_moyen,
                    ST_AsGeoJSON(ST_SimplifyPreserveTopology(d.geom,0.01),4)::text AS geojson
             FROM departements_geom_4326 d
-            JOIN ta_taux t ON LEFT(t.code_insee,2) = d.code_insee
+            JOIN ta_taux t ON LPAD(LEFT(t.code_insee,2),2,'0') = d.code_insee
             GROUP BY d.code_insee, d.nom_officiel, d.geom";
 
     $features = [];
@@ -1331,7 +1376,8 @@ Flight::route('POST /api/tsb/import', function () {
         $db->commit();
     } catch (\Throwable $e) {
         $db->rollBack();
-        Flight::json(['error' => 'Erreur BDD : ' . $e->getMessage()], 500); return;
+        error_log('[rsig] SQL error: ' . $e->getMessage());
+        Flight::json(['error' => 'Erreur base de données'], 500); return;
     }
 
     Flight::json([
@@ -1704,4 +1750,29 @@ Flight::route('GET /api/bofip/parse', function () {
     if (preg_match('/(\d{8})$/', $url, $m)) $result['millesime'] = substr($m[1], 0, 4);
 
     Flight::json($result);
+});
+
+// ── Ortho — millésimes d'acquisition par campagne ────────────────────────────
+// Retourne un GeoJSON de départements avec l'année d'acquisition dans la campagne
+// ?campagne=2000-2005 | 2006-2010 | 2011-2015 | 2016-2020 | 2021-2023 | actuelle
+Flight::route('GET /api/ortho/millesimes', function () {
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+
+    $campagne = Flight::request()->query['campagne'] ?? 'actuelle';
+    $allowed  = ['2000-2005','2006-2010','2011-2015','2016-2020','2021-2023','actuelle'];
+    if (!in_array($campagne, $allowed, true)) {
+        Flight::json(['error' => 'campagne invalide'], 400); return;
+    }
+
+    $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
+                   o.annee_acq,
+                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(d.geom, 0.01),4)::text AS geojson
+            FROM departements_geom_4326 d
+            JOIN ortho_millesimes_dept o ON o.code_dept = d.code_insee
+            WHERE o.campagne = :campagne
+            ORDER BY d.code_insee";
+
+    $stmt = $db->prepare($sql);
+    $stmt->execute([':campagne' => $campagne]);
+    Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
 });

@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, bddOnTop } from '../utils.js';
+import { showSpinner, hideSpinner, bddOnTop, apiFetch } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 
@@ -31,7 +31,7 @@ let ctrlIdf  = null;
 let ctrlPaca = null;
 
 // Pré-charge les millésimes disponibles
-const millesimesReady = fetch('/api/tsb/millesimes').then(r => r.json()).catch(() => [2025]);
+const millesimesReady = fetch('/api/tsb/millesimes').then(r => r.json()).catch(e => { console.warn('[tsb] millesimes', e); return [2025]; });
 
 // Cache des tarifs par millésime
 const tarifsCache = {};
@@ -40,7 +40,7 @@ function getTarifs(millesime) {
     return fetch(`/api/tsb/tarifs?millesime=${millesime}`)
         .then(r => r.json())
         .then(d => { tarifsCache[millesime] = d.tarifs || []; return tarifsCache[millesime]; })
-        .catch(() => []);
+        .catch(e => { console.warn('[tsb] tarifs', e); return []; });
 }
 
 function layerIds(region) {
@@ -68,7 +68,7 @@ function loadRegion(map, region) {
 
     showSpinner();
     const mil = getMillesime(region);
-    fetch(`/api/tsb?region=${region}${mil ? '&millesime=' + mil : ''}`, { signal })
+    apiFetch(`/api/tsb?region=${region}${mil ? '&millesime=' + mil : ''}`, { signal })
         .then(r => r.json())
         .then(fc => {
             hideSpinner();
@@ -118,13 +118,13 @@ function loadRegion(map, region) {
                 if (c === 2 && has2bis)
                     entries.push({ label: LABELS[region]['2b'], color: PALETTE['2b'].fill });
             });
-            saveLegend(`tsb-${region}`, `TSB ${region}`, entries.map(e => e.label), entries.map(e => e.color), '');
+            saveLegend(`tsb-${region.toLowerCase()}`, `TSB ${region}`, entries.map(e => e.label), entries.map(e => e.color), '');
 
             // Curseur
             map.on('mouseenter', `tsb-${region.toLowerCase()}-fill`, () => map.getCanvas().style.cursor = 'pointer');
             map.on('mouseleave', `tsb-${region.toLowerCase()}-fill`, () => map.getCanvas().style.cursor = '');
         })
-        .catch(e => { hideSpinner(); if (e.name !== 'AbortError') console.error(`tsb-${region}`, e); });
+        .catch(e => { hideSpinner(); });
 }
 
 export function initTsb(map) {
@@ -196,7 +196,7 @@ export function initTsb(map) {
         remove(map, region);
         if (region === 'IDF') loadedIdf = false;
         else loadedPaca = false;
-        dropLegend(`tsb-${region}`);
+        dropLegend(`tsb-${region.toLowerCase()}`);
         loadRegion(map, region);
     }
 
@@ -209,7 +209,7 @@ export function initTsb(map) {
         if (!activeIdf) {
             remove(map, 'IDF');
             loadedIdf = false;
-            dropLegend('tsb-IDF');
+            dropLegend('tsb-idf');
             clearInfo('tsb');
         } else if (!loadedIdf) {
             loadRegion(map, 'IDF');
@@ -222,7 +222,7 @@ export function initTsb(map) {
         if (!activePaca) {
             remove(map, 'PACA');
             loadedPaca = false;
-            dropLegend('tsb-PACA');
+            dropLegend('tsb-paca');
             clearInfo('tsb');
         } else if (!loadedPaca) {
             loadRegion(map, 'PACA');
