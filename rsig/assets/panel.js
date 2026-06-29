@@ -14,7 +14,7 @@ document.getElementById('close-right').addEventListener('click', () => {
 const _sections = {};
 
 function _renderPanel() {
-    const keys = ['taux', 'tarifs', 'coeff', 'cfe', 'tf', 'ta', 'ta-majore', 'sections', 'tsb', 'tass', 'zfu', 'dossiers', 'osm'];
+    const keys = ['taux', 'tarifs', 'coeff', 'cfe', 'tf', 'ta', 'ta-majore', 'sections', 'tsb', 'tass', 'zfu', 'dossiers', 'prospects', 'osm'];
     const active = keys.filter(k => _sections[k]);
     if (!active.length) { panelRight.classList.add('panel-closed'); return; }
     const first = _sections[active[0]];
