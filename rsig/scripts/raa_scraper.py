@@ -32,9 +32,11 @@ LOG_FILE  = "C:/Temp/raa_scraper.log"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (compatible; RSig-RAAScraper/1.0; recherche academique fiscalite locale)"
 }
-DELAY_BETWEEN_REQUESTS = 1.5   # secondes — respectueux des serveurs
+DELAY_BETWEEN_REQUESTS = 3.0   # secondes — respectueux des serveurs
 PDF_MAX_PAGES = 80              # ne pas traiter les PDF > 80 pages (RAA complets)
-PDF_MAX_SIZE_MB = 25
+PDF_MAX_SIZE_MB = 20            # ignorer les gros PDFs (RAA complets consolidés)
+RETRY_MAX = 3
+RETRY_BACKOFF = [5, 15, 30]    # secondes entre tentatives
 
 # ── Mots-clés fiscaux ─────────────────────────────────────────────────────────
 KEYWORDS = [
@@ -209,32 +211,44 @@ session = requests.Session()
 session.headers.update(HEADERS)
 
 def fetch_html(url, timeout=20):
-    try:
-        r = session.get(url, timeout=timeout)
-        r.raise_for_status()
-        return r.text
-    except Exception as e:
-        log.warning(f"fetch_html {url}: {e}")
-        return None
-
-def fetch_pdf_bytes(url, timeout=60):
-    try:
-        r = session.get(url, timeout=timeout, stream=True)
-        r.raise_for_status()
-        size = int(r.headers.get("content-length", 0))
-        if size > PDF_MAX_SIZE_MB * 1024 * 1024:
-            log.info(f"PDF trop grand ({size//1024//1024} Mo), ignoré: {url}")
-            return None
-        data = b""
-        for chunk in r.iter_content(65536):
-            data += chunk
-            if len(data) > PDF_MAX_SIZE_MB * 1024 * 1024:
-                log.info(f"PDF trop grand (stream), ignoré: {url}")
+    for attempt, wait in enumerate([0] + RETRY_BACKOFF):
+        if wait:
+            log.info(f"  retry {attempt}/{RETRY_MAX} dans {wait}s…")
+            time.sleep(wait)
+        try:
+            r = session.get(url, timeout=timeout)
+            r.raise_for_status()
+            return r.text
+        except Exception as e:
+            log.warning(f"fetch_html {url}: {e}")
+            if attempt >= RETRY_MAX - 1:
                 return None
-        return data
-    except Exception as e:
-        log.warning(f"fetch_pdf {url}: {e}")
-        return None
+    return None
+
+def fetch_pdf_bytes(url, timeout=90):
+    for attempt, wait in enumerate([0] + RETRY_BACKOFF):
+        if wait:
+            log.info(f"  retry PDF {attempt}/{RETRY_MAX} dans {wait}s…")
+            time.sleep(wait)
+        try:
+            r = session.get(url, timeout=timeout, stream=True)
+            r.raise_for_status()
+            size = int(r.headers.get("content-length", 0))
+            if size > PDF_MAX_SIZE_MB * 1024 * 1024:
+                log.info(f"PDF trop grand ({size//1024//1024} Mo), ignoré: {url}")
+                return None
+            data = b""
+            for chunk in r.iter_content(65536):
+                data += chunk
+                if len(data) > PDF_MAX_SIZE_MB * 1024 * 1024:
+                    log.info(f"PDF trop grand (stream), ignoré: {url}")
+                    return None
+            return data
+        except Exception as e:
+            log.warning(f"fetch_pdf attempt {attempt} {url}: {e}")
+            if attempt >= RETRY_MAX - 1:
+                return None
+    return None
 
 
 # ── Extraction PDF ─────────────────────────────────────────────────────────────
