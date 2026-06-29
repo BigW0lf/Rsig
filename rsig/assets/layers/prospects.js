@@ -1,6 +1,6 @@
 import { showSpinner, hideSpinner, bddOnTop, apiFetch } from '../utils.js';
 import { isMeasuring } from '../measure.js';
-import { dropLegend } from '../legend.js';
+import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 
 let active = false;
@@ -57,7 +57,11 @@ export function initProspects(map) {
                 map.addLayer({ id: 'prospects-circle', type: 'circle', source: 'prospects-src',
                     filter: ['!', ['has', 'point_count']],
                     paint: {
-                        'circle-color': ['get', '_color'],
+                        'circle-color': ['case',
+                            ['>=', ['to-number', ['get', 'evol_pct']], 20], COLOR_HIGH,
+                            ['>=', ['to-number', ['get', 'evol_pct']], 10], COLOR_MED,
+                            COLOR_LOW,
+                        ],
                         'circle-radius': 8,
                         'circle-stroke-width': 2,
                         'circle-stroke-color': '#fff',
@@ -80,6 +84,12 @@ export function initProspects(map) {
                 });
 
                 loaded = true;
+                saveLegend(
+                    'prospects',
+                    'Prospects – évol. coeff. loc.',
+                    ['> 0 – 10 %', '10 – 20 %', '≥ 20 %'],
+                    [COLOR_LOW, COLOR_MED, COLOR_HIGH]
+                );
                 bddOnTop(map);
 
                 map.on('mouseenter', 'prospects-circle',  () => map.getCanvas().style.cursor = 'pointer');
