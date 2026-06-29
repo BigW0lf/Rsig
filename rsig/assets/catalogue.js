@@ -66,15 +66,15 @@ const CATALOGUE = [
     {
         group: 'Commercial',
         layers: [
-            { id: 'dossiers',   mapPrefix: 'dossiers',   label: 'Dossiers CRM',        optionsId: null, desc: 'Dossiers CRM géolocalisés' },
             { id: 'prospects',  mapPrefix: 'prospects',  label: 'Prospects coeff loc.', optionsId: null, desc: 'Sociétés privées sur parcelles à coeff en hausse 2017→2024, bâti >500 m², hors industrie' },
         ],
     },
     {
         group: 'Autres',
         layers: [
-            { id: 'zfu',      mapPrefix: 'zfu',      label: 'ZFU — Exo. TSB',     optionsId: null,          desc: 'Zones franches urbaines — exonération TSB' },
-            { id: 'ortho',    mapPrefix: null, label: 'Ortho historique IGN', optionsId: null, desc: 'Campagnes d\'acquisition 2000-2025 + millésimes par département' },
+            { id: 'dossiers', mapPrefix: 'dossiers', label: 'Dossiers CRM',        optionsId: null, desc: 'Dossiers CRM géolocalisés' },
+            { id: 'zfu',      mapPrefix: 'zfu',      label: 'ZFU — Exo. TSB',     optionsId: null, desc: 'Zones franches urbaines — exonération TSB' },
+            { id: 'ortho',    mapPrefix: null,        label: 'Ortho historique IGN', optionsId: null, desc: 'Campagnes d\'acquisition 2000-2025 + millésimes par département' },
         ],
     },
 ];
