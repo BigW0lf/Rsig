@@ -304,6 +304,19 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
     color: var(--text3);
     margin-top: 1px;
 }
+.coeff-seuil-label { user-select: none; }
+.coeff-seuil-label #coeff-seuil-val { font-weight: 700; color: var(--text); margin-left: 4px; }
+.layer-sub input[type=range] {
+    width: 100%;
+    margin: 2px 0 0;
+    accent-color: var(--blue);
+}
+.layer-hint {
+    font-size: 10px;
+    color: var(--text3);
+    font-style: italic;
+    margin-top: 1px;
+}
 
 /* ── Légende bas-droite carte ─────────── */
 #legend {

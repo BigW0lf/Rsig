@@ -260,6 +260,12 @@ kbd {
                 Taux fiscaux
             </label>
             <div id="taux-options" class="layer-sub hidden">
+                <label>Mode
+                    <select id="taux-mode">
+                        <option value="normal">Valeur</option>
+                        <option value="evolution">Évolution entre 2 millésimes</option>
+                    </select>
+                </label>
                 <label>Taux
                     <select id="taux-champ">
                         <optgroup label="TFPB — Taxe foncière bâti">
@@ -279,9 +285,19 @@ kbd {
                         </optgroup>
                     </select>
                 </label>
-                <label>Millésime
-                    <select id="taux-millesime"><option value="2025">2025</option></select>
-                </label>
+                <div id="taux-normal-opts">
+                    <label>Millésime
+                        <select id="taux-millesime"><option value="2025">2025</option></select>
+                    </label>
+                </div>
+                <div id="taux-evol-opts" class="hidden">
+                    <label>De
+                        <select id="taux-evol-de"></select>
+                    </label>
+                    <label>À
+                        <select id="taux-evol-a"></select>
+                    </label>
+                </div>
             </div>
         </div>
 
@@ -304,6 +320,11 @@ kbd {
                         <option value="evolution">Évolution 2017→2026 (%)</option>
                     </select>
                 </label>
+                <label class="coeff-seuil-label">
+                    Seuil min. <span id="coeff-seuil-val">1,00</span>
+                    <input type="range" id="coeff-seuil" min="0.5" max="2" step="0.05" value="1">
+                </label>
+                <div id="coeff-seuil-hint" class="layer-hint">Affiche uniquement coeff ≥ seuil — prospects surévalués</div>
             </div>
         </div>
 

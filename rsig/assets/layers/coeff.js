@@ -10,6 +10,7 @@ let clusterChamp = null;
 const globalBreaks = {};
 
 const MIN_ZOOM = 13;
+let _seuil = 1.0;
 
 function bboxParam(map) {
     const b = map.getBounds();
@@ -50,6 +51,19 @@ function getVal(p, champ) {
         return (p.coeff_2026 != null && p.coeff_2017 != null && +p.coeff_2017 !== 0)
             ? ((+p.coeff_2026 - +p.coeff_2017) / +p.coeff_2017 * 100) : null;
     return p[champ] != null ? +p[champ] : null;
+}
+
+function applySeuilFilter(fc, champ) {
+    if (!fc?.features) return fc;
+    const isEvol = champ === 'evolution';
+    if (isEvol) return fc; // seuil non applicable sur l'évolution %
+    return {
+        ...fc,
+        features: fc.features.filter(f => {
+            const v = f.properties[champ];
+            return v != null && +v >= _seuil;
+        })
+    };
 }
 
 // Génère un pattern hachuré en biais pour une couleur donnée (traits colorés, fond transparent)
@@ -241,7 +255,6 @@ export function loadCoeff(map) {
     const pal    = isEvol ? PAL.coeffEv : PAL.coeff;
 
     if (isEvol) {
-        // breaks calculés sur les vraies valeurs % pour que la légende soit correcte
         fetchLayer(`/api/coeff?bbox=${bboxParam(map)}`, fc => {
             polyCache = fc;
             if (!fc?.features?.length) return;
@@ -257,8 +270,9 @@ export function loadCoeff(map) {
                 polyCache = fc;
                 if (!fc?.features?.length) return;
                 fc.features.forEach(f => { f.properties[champ] = getVal(f.properties, champ); });
-                const breaks = globalB ?? computeBreaks(fc.features.map(f => f.properties[champ]).filter(v => v != null && isFinite(v)), 6);
-                upsertPoly(map, fc, pal[pal.length - 1], breaks, pal, champ);
+                const filtered = applySeuilFilter(fc, champ);
+                const breaks = globalB ?? computeBreaks(filtered.features.map(f => f.properties[champ]).filter(v => v != null && isFinite(v)), 6);
+                upsertPoly(map, filtered, pal[pal.length - 1], breaks, pal, champ);
                 saveLegend('coeff', champEl.options[champEl.selectedIndex].text, breaks, pal, '');
             });
         });
@@ -277,6 +291,27 @@ export function initCoeff(map) {
         else loadCoeff(map);
     });
     champEl.addEventListener('change', () => { polyCache = null; clusterCache = null; clearInfo('coeff'); loadCoeff(map); });
+
+    const seuilEl  = document.getElementById('coeff-seuil');
+    const seuilVal = document.getElementById('coeff-seuil-val');
+    if (seuilEl) {
+        seuilEl.addEventListener('input', () => {
+            _seuil = parseFloat(seuilEl.value);
+            seuilVal.textContent = _seuil.toFixed(2).replace('.', ',');
+            if (active && polyCache) {
+                const champ = champEl.value;
+                const isEvol = champ === 'evolution';
+                if (!isEvol) {
+                    const pal = PAL.coeff;
+                    const filtered = applySeuilFilter(polyCache, champ);
+                    filtered.features.forEach(f => { f.properties[champ] = getVal(f.properties, champ); });
+                    const breaks = globalBreaks[champ] ?? computeBreaks(filtered.features.map(f => f.properties[champ]).filter(v => v != null && isFinite(v)), 6);
+                    upsertPoly(map, filtered, pal[pal.length - 1], breaks, pal, champ);
+                    saveLegend('coeff', champEl.options[champEl.selectedIndex].text, breaks, pal, '');
+                }
+            }
+        });
+    }
 
     map.on('click', 'coeff-fill', e => {
         if (!active) return;

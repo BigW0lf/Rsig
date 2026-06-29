@@ -9,6 +9,9 @@ const cache = {};
 
 const DEPT_ZOOM = 9;
 
+// Palette divergente pour l'évolution : vert (baisse) → blanc → rouge (hausse)
+const PAL_EVOL = ['#1a9641','#a6d96a','#ffffbf','#fdae61','#d7191c'];
+
 const CHAMP_LABELS = {
     taux_fb_commune_vote:  'TFPB Commune',
     taux_fb_syndicats_net: 'TFPB Syndicat',
@@ -60,14 +63,42 @@ function remove(map) {
 }
 
 function getLevel(zoom) { return zoom < DEPT_ZOOM ? 'dept' : 'commune'; }
+function getMode() { return document.getElementById('taux-mode')?.value ?? 'normal'; }
 
 export function loadTaux(map) {
     if (!active) return;
-    const champ     = document.getElementById('taux-champ').value;
-    const millesime = document.getElementById('taux-millesime').value;
-    const level     = getLevel(map.getZoom());
-    const myId      = ++loadId;
+    const champ  = document.getElementById('taux-champ').value;
+    const mode   = getMode();
+    const level  = getLevel(map.getZoom());
+    const myId   = ++loadId;
 
+    if (mode === 'evolution') {
+        const milDe = document.getElementById('taux-evol-de')?.value ?? '2021';
+        const milA  = document.getElementById('taux-evol-a')?.value  ?? '2025';
+        const label = (CHAMP_LABELS[champ] ?? champ) + ` — Évol. ${milDe}→${milA}`;
+
+        const renderEvol = (fc, lvl) => {
+            if (myId !== loadId || !active) return;
+            if (!fc?.features?.length) { if (map.getSource('taux-src')) map.getSource('taux-src').setData({ type: 'FeatureCollection', features: [] }); return; }
+            const vals   = fc.features.map(f => +f.properties.delta).filter(v => isFinite(v));
+            const breaks = computeBreaks(vals, 5);
+            upsert(map, fc, stepExpr('delta', breaks, PAL_EVOL));
+            const sfx = lvl === 'dept' ? ' pts (moy. dep.)' : ' pts';
+            saveLegend('taux', label + (lvl === 'dept' ? ' — moy. par département' : ' — communes'), breaks, PAL_EVOL, sfx);
+        };
+
+        if (level === 'dept') {
+            const key = `evol|${champ}|${milDe}|${milA}|dept`;
+            if (cache[key]) { renderEvol(cache[key], 'dept'); return; }
+            fetchLayer(`/api/taux/evolution?champ=${champ}&de=${milDe}&a=${milA}&level=dept`, fc => { cache[key] = fc; renderEvol(fc, 'dept'); });
+        } else {
+            fetchLayer(`/api/taux/evolution?champ=${champ}&de=${milDe}&a=${milA}&bbox=${bboxParam(map)}`, fc => renderEvol(fc, 'commune'));
+        }
+        return;
+    }
+
+    // Mode normal
+    const millesime = document.getElementById('taux-millesime').value;
     const render = (fc, renderLevel) => {
         if (myId !== loadId || !active) return;
         if (getLevel(map.getZoom()) !== renderLevel) return;
@@ -96,15 +127,35 @@ export function initTaux(map) {
     const options     = document.getElementById('taux-options');
     const champEl     = document.getElementById('taux-champ');
     const millesimeEl = document.getElementById('taux-millesime');
+    const modeEl      = document.getElementById('taux-mode');
+    const normalOpts  = document.getElementById('taux-normal-opts');
+    const evolOpts    = document.getElementById('taux-evol-opts');
+    const evolDeEl    = document.getElementById('taux-evol-de');
+    const evolAEl     = document.getElementById('taux-evol-a');
 
     fetch('/api/taux/millesimes')
         .then(r => r.json())
         .then(ms => {
             if (!ms?.length) return;
             millesimeEl.innerHTML = ms.map(m => `<option value="${m}">${m}</option>`).join('');
+            // Peupler aussi les selects évolution
+            if (evolDeEl) evolDeEl.innerHTML = ms.slice().reverse().map(m => `<option value="${m}">${m}</option>`).join('');
+            if (evolAEl)  { evolAEl.innerHTML = ms.map(m => `<option value="${m}">${m}</option>`).join(''); }
+            // Défaut : de = plus ancien, a = plus récent
+            if (evolDeEl && ms.length > 1) evolDeEl.value = ms[ms.length - 1];
+            if (evolAEl  && ms.length > 0) evolAEl.value  = ms[0];
             if (active) loadTaux(map);
         })
         .catch(e => console.warn('[taux] millesimes', e));
+
+    modeEl?.addEventListener('change', () => {
+        const isEvol = modeEl.value === 'evolution';
+        normalOpts?.classList.toggle('hidden', isEvol);
+        evolOpts?.classList.toggle('hidden', !isEvol);
+        Object.keys(cache).forEach(k => delete cache[k]);
+        clearInfo('taux');
+        loadTaux(map);
+    });
 
     toggle.addEventListener('change', () => {
         active = toggle.checked;
@@ -118,24 +169,43 @@ export function initTaux(map) {
         clearInfo('taux');
         loadTaux(map);
     });
+    evolDeEl?.addEventListener('change', () => { Object.keys(cache).forEach(k => delete cache[k]); clearInfo('taux'); loadTaux(map); });
+    evolAEl?.addEventListener('change',  () => { Object.keys(cache).forEach(k => delete cache[k]); clearInfo('taux'); loadTaux(map); });
 
     map.on('click', 'taux-fill', e => {
         if (!active) return;
         const p     = e.features[0].properties;
-        const v     = p.valeur_affichee;
-        const label = CHAMP_LABELS[champEl.value] ?? champEl.value;
-        const mil   = millesimeEl.value;
+        const champ = champEl.value;
+        const mode  = getMode();
+        const label = CHAMP_LABELS[champ] ?? champ;
         const fmt   = val => val != null ? (+val).toFixed(4) + ' %' : '–';
+        const fmtPts = val => val != null ? (val > 0 ? '+' : '') + (+val).toFixed(4) + ' pts' : '–';
 
         if (p.nom_dep) {
+            // Clic sur département
+            const milDe = evolDeEl?.value ?? '2021';
+            const milA  = evolAEl?.value  ?? millesimeEl.value;
             showInfo('taux', `${p.nom_dep} (${p.code_dep})`,
-                irow(label + ' moyen ' + mil, fmt(v)) +
-                `<div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 9 pour voir le détail par commune</div>`
+                mode === 'evolution'
+                    ? irow(`${label} évol. ${milDe}→${milA}`, fmtPts(p.delta)) + irow(`Taux moy. ${milDe}`, fmt(p.val_de)) + irow(`Taux moy. ${milA}`, fmt(p.val_a))
+                    : irow(label + ' moyen ' + millesimeEl.value, fmt(p.valeur_affichee)) +
+                      `<div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 9 pour voir le détail par commune</div>`
+            );
+        } else if (mode === 'evolution') {
+            // Clic commune mode évolution
+            const milDe = evolDeEl?.value ?? '2021';
+            const milA  = evolAEl?.value  ?? '2025';
+            const deltaClass = +p.delta > 0 ? 'tag-up' : +p.delta < 0 ? 'tag-down' : '';
+            showInfo('taux', `${p.libcom} (${p.dep})`,
+                `<div class="info-row"><span class="info-label">${label} ${milDe}→${milA}</span><span class="info-value ${deltaClass}">${fmtPts(p.delta)}</span></div>` +
+                irow(`Taux ${milDe}`, fmt(p.val_de)) +
+                irow(`Taux ${milA}`,  fmt(p.val_a))
             );
         } else {
+            // Clic commune mode normal — + benchmark
+            const mil = millesimeEl.value;
             const fmtNull = val => val != null ? (+val).toFixed(4) + ' %' : null;
-            showInfo('taux', `${p.libcom} (${p.dep}) — ${mil}`,
-                irow(label, fmt(v)) +
+            const baseHtml = irow(label, fmt(p.valeur_affichee)) +
                 `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:11px;color:var(--text3)">Tous les taux</summary>
                 ${irow('TFPB Commune',    fmtNull(p.taux_fb_commune_vote))}
                 ${irow('TFPB Syndicat',  fmtNull(p.taux_fb_syndicats_net))}
@@ -148,8 +218,36 @@ export function initTaux(map) {
                 ${irow('TFPNB Syndicat', fmtNull(p.taux_fnb_syndicats_net))}
                 ${irow('TFPNB EPCI',     fmtNull(p.taux_fnb_gfp_vote))}
                 ${irow('TFPNB TASA EPCI',fmtNull(p.taux_tafnb_gfp_net))}
-                </details>`
-            );
+                </details>`;
+
+            showInfo('taux', `${p.libcom} (${p.dep}) — ${mil}`, baseHtml + `<div id="taux-benchmark-zone" style="margin-top:6px;font-size:11px;color:var(--text3)">Calcul benchmark…</div>`);
+
+            // Charger benchmark en asynchrone
+            const dep = String(p.dep).padStart(2, '0');
+            const com = p.com;
+            fetch(`/api/taux/benchmark?champ=${champ}&millesime=${mil}&dep=${dep}&com=${com}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(b => {
+                    const zone = document.getElementById('taux-benchmark-zone');
+                    if (!zone || !b) { if (zone) zone.remove(); return; }
+                    const rang = b.rang_desc;
+                    const nb   = b.nb_communes;
+                    const pct  = b.pct_rang;
+                    const tagCls = pct <= 20 ? 'tag-up' : pct >= 80 ? 'tag-down' : '';
+                    const evolRows = (b.evolution ?? []).map(r =>
+                        `<tr><td>${r.millesime}</td><td>${(+r.val).toFixed(4)} %</td></tr>`
+                    ).join('');
+                    zone.outerHTML = `
+                        <details open style="margin-top:6px">
+                            <summary style="cursor:pointer;font-weight:600;font-size:11px">Benchmark département</summary>
+                            ${irow('Rang dans le dép.', `<span class="${tagCls}">${rang} / ${nb} (top ${pct} %)</span>`)}
+                            ${irow('Médiane dép.', fmt(b.mediane))}
+                            ${irow('Moyenne dép.', fmt(b.moyenne))}
+                            ${irow('Min / Max', `${fmt(b.min_val)} / ${fmt(b.max_val)}`)}
+                            ${evolRows ? `<table class="evol-table" style="margin-top:4px"><tr><th>Millésime</th><th>${label}</th></tr>${evolRows}</table>` : ''}
+                        </details>`;
+                })
+                .catch(() => { const z = document.getElementById('taux-benchmark-zone'); if (z) z.remove(); });
         }
     });
 

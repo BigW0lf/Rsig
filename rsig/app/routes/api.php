@@ -429,6 +429,104 @@ Flight::route('GET /api/taux/departements', function () {
     Flight::json($result);
 });
 
+// Évolution d'un taux entre deux millésimes — retourne un GeoJSON communes/dep avec le delta
+Flight::route('GET /api/taux/evolution', function () {
+    $champ  = validateChamp(Flight::request()->query['champ'] ?? '', TAUX_CHAMPS, 'taux_fb_commune_vote');
+    $milDe  = validateMillesime(Flight::request()->query['de']   ?? '2021');
+    $milA   = validateMillesime(Flight::request()->query['a']    ?? '2025');
+    $level  = Flight::request()->query['level'] ?? 'commune';
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+
+    if ($level === 'dept') {
+        $cacheKey = "taux_evol_dept_{$champ}_{$milDe}_{$milA}";
+        if ($cached = cacheGet($cacheKey)) { Flight::json($cached); return; }
+        $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
+                       ROUND((AVG(t2.$champ::numeric) - AVG(t1.$champ::numeric))::numeric, 4) AS delta,
+                       ROUND(AVG(t1.$champ::numeric)::numeric, 4) AS val_de,
+                       ROUND(AVG(t2.$champ::numeric)::numeric, 4) AS val_a,
+                       ST_AsGeoJSON(ST_SimplifyPreserveTopology(d.geom, 0.01),4)::text AS geojson
+                FROM departements_geom_4326 d
+                JOIN taux_clean t1 ON lpad(t1.dep,2,'0') = d.code_insee AND t1.millesime = :milDe AND t1.$champ IS NOT NULL
+                JOIN taux_clean t2 ON t2.dep = t1.dep AND t2.com = t1.com AND t2.millesime = :milA AND t2.$champ IS NOT NULL
+                GROUP BY d.code_insee, d.nom_officiel, d.geom";
+        $stmt = $db->prepare($sql);
+        $stmt->execute([':milDe' => $milDe, ':milA' => $milA]);
+        $result = ['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)];
+        cacheSet($cacheKey, $result, 600);
+        Flight::json($result);
+    } else {
+        $b = parseBbox();
+        $conds = ["t1.millesime = :milDe", "t2.millesime = :milA", "t1.$champ IS NOT NULL", "t2.$champ IS NOT NULL"];
+        if ($b) $conds[] = "ST_Intersects(ST_SetSRID(t1.geom,4326), ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326))";
+        $where = 'WHERE ' . implode(' AND ', $conds);
+        $sql = "SELECT t1.ogc_fid, t1.dep, t1.com, t1.libcom, t1.millesime AS millesime_de, t2.millesime AS millesime_a,
+                       t1.$champ AS val_de, t2.$champ AS val_a,
+                       ROUND((t2.$champ::numeric - t1.$champ::numeric)::numeric, 4) AS delta,
+                       ST_AsGeoJSON(ST_SetSRID(t1.geom,4326),6)::text AS geojson
+                FROM taux_clean t1
+                JOIN taux_clean t2 ON t2.dep = t1.dep AND t2.com = t1.com AND t2.millesime = :milA
+                $where LIMIT 5000";
+        $stmt = $db->prepare($sql);
+        $stmt->bindValue(':milDe', $milDe);
+        $stmt->bindValue(':milA',  $milA);
+        if ($b) bindBbox($stmt, $b);
+        $stmt->execute();
+        Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
+    }
+});
+
+// Benchmark d'une commune : rang dans le département + médiane dep + évolution
+Flight::route('GET /api/taux/benchmark', function () {
+    $champ     = validateChamp(Flight::request()->query['champ'] ?? '', TAUX_CHAMPS, 'taux_fb_commune_vote');
+    $millesime = validateMillesime(Flight::request()->query['millesime'] ?? '2025');
+    $dep       = preg_replace('/[^0-9A-Za-z]/', '', Flight::request()->query['dep'] ?? '');
+    $com       = preg_replace('/[^0-9]/', '', Flight::request()->query['com'] ?? '');
+    if (!$dep || !$com) { Flight::json(['error' => 'dep et com requis'], 400); return; }
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+
+    // Valeur de la commune + stats département
+    $sql = "WITH dep_vals AS (
+                SELECT com, $champ::numeric AS val
+                FROM taux_clean
+                WHERE dep = :dep AND millesime = :mil AND $champ IS NOT NULL
+            ),
+            stats AS (
+                SELECT
+                    COUNT(*) AS nb_communes,
+                    ROUND(percentile_cont(0.5) WITHIN GROUP (ORDER BY val)::numeric, 4) AS mediane,
+                    ROUND(AVG(val)::numeric, 4) AS moyenne,
+                    ROUND(MIN(val)::numeric, 4) AS min_val,
+                    ROUND(MAX(val)::numeric, 4) AS max_val
+                FROM dep_vals
+            ),
+            rang AS (
+                SELECT com,
+                       RANK() OVER (ORDER BY val DESC) AS rang_desc
+                FROM dep_vals
+            )
+            SELECT s.nb_communes, s.mediane, s.moyenne, s.min_val, s.max_val,
+                   r.rang_desc,
+                   ROUND(r.rang_desc::numeric / s.nb_communes * 100, 1) AS pct_rang,
+                   d.val AS val_commune
+            FROM stats s
+            JOIN dep_vals d ON d.com = :com
+            JOIN rang r ON r.com = :com";
+    $stmt = $db->prepare($sql);
+    $stmt->execute([':dep' => $dep, ':mil' => $millesime, ':com' => $com]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) { Flight::json(['error' => 'commune non trouvée'], 404); return; }
+
+    // Évolution sur toutes les années disponibles
+    $sqlEvol = "SELECT millesime, ROUND($champ::numeric, 4) AS val
+                FROM taux_clean WHERE dep = :dep AND com = :com AND $champ IS NOT NULL
+                ORDER BY millesime";
+    $stmtE = $db->prepare($sqlEvol);
+    $stmtE->execute([':dep' => $dep, ':com' => $com]);
+    $evol = $stmtE->fetchAll(PDO::FETCH_ASSOC);
+
+    Flight::json(array_merge($row, ['evolution' => $evol]));
+});
+
 // ── CFE ──────────────────────────────────────────────────
 // Toutes les routes CFE requièrent categorie + annee (indicateur × tarif TF)
 
