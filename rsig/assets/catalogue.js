@@ -110,6 +110,8 @@ function countActive() {
 }
 
 // Retourne true si au moins une couche est active ET visible (non masquée par l'œil)
+export function isHidden(layerId) { return !!_hidden[layerId]; }
+
 export function hasVisibleLayer() {
     return CATALOGUE.flatMap(g => g.layers).some(l => {
         const cb = getToggle(l.id);

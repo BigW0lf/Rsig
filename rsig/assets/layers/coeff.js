@@ -1,6 +1,7 @@
 import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop, apiFetch } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
+import { isHidden } from '../catalogue.js';
 
 let active = false;
 let abortCtrl    = null;
@@ -93,7 +94,7 @@ function ensureHatchForColor(map, colorHex, key) {
 }
 
 // Met à jour (ou crée) les sources hachurées par classe de couleur — setData si déjà existantes
-function buildHatchSources(map, fc, breaks, palette, propKey, beforeLayer) {
+function buildHatchSources(map, fc, breaks, palette, propKey, beforeLayer, vis = 'visible') {
     if (!breaks?.length) return;
     palette.forEach((col, i) => {
         const imgKey = `coeff-hatch-img-${col.replace('#','')}`;
@@ -107,43 +108,44 @@ function buildHatchSources(map, fc, breaks, palette, propKey, beforeLayer) {
         const data  = { type: 'FeatureCollection', features: feats };
         const srcId = `coeff-hatch-src-${i}`;
         if (map.getSource(srcId)) {
-            // Source déjà créée : mise à jour sans remove/add
             map.getSource(srcId).setData(data);
             if (map.getLayer(`coeff-hatch-${i}`)) {
-                map.setLayoutProperty(`coeff-hatch-${i}`, 'visibility', feats.length ? 'visible' : 'none');
+                map.setLayoutProperty(`coeff-hatch-${i}`, 'visibility', vis === 'none' ? 'none' : (feats.length ? 'visible' : 'none'));
             }
         } else {
             if (!feats.length) return;
             map.addSource(srcId, { type: 'geojson', data });
             map.addLayer({ id: `coeff-hatch-${i}`, type: 'fill', source: srcId,
+                layout: { visibility: vis },
                 paint: { 'fill-pattern': imgKey } }, beforeLayer);
         }
     });
 }
 
 function upsertPoly(map, fc, color, breaks, palette, propKey) {
-    // Coeff au-dessus de taux/tarifs, sous les dossiers
     const beforeLayer = map.getLayer('dossiers-circle') ? 'dossiers-circle' : undefined;
+    const vis = isHidden('coeff') ? 'none' : 'visible';
 
     if (map.getLayer('coeff-fill')) {
         map.getSource('coeff-src').setData(fc);
-        map.setLayoutProperty('coeff-fill', 'visibility', 'visible');
-        map.setLayoutProperty('coeff-line', 'visibility', 'visible');
-        buildHatchSources(map, fc, breaks, palette, propKey, beforeLayer);
+        map.setLayoutProperty('coeff-fill', 'visibility', vis);
+        map.setLayoutProperty('coeff-line', 'visibility', vis);
+        buildHatchSources(map, fc, breaks, palette, propKey, beforeLayer, vis);
     } else {
         if (map.getSource('coeff-src')) {
             ['coeff-line','coeff-fill'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
             map.removeSource('coeff-src');
         }
         map.addSource('coeff-src', { type: 'geojson', data: fc });
-        // Fond transparent — on voit le fond de carte
         map.addLayer({ id: 'coeff-fill', type: 'fill', source: 'coeff-src',
+            layout: { visibility: vis },
             paint: { 'fill-color': 'rgba(0,0,0,0)' } }, beforeLayer);
         map.addLayer({ id: 'coeff-line', type: 'line', source: 'coeff-src',
+            layout: { visibility: vis },
             paint: { 'line-color': color, 'line-width': 0.8 } }, beforeLayer);
         map.on('mouseenter', 'coeff-fill', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'coeff-fill', () => map.getCanvas().style.cursor = '');
-        buildHatchSources(map, fc, breaks, palette, propKey, beforeLayer);
+        buildHatchSources(map, fc, breaks, palette, propKey, beforeLayer, vis);
     }
     bddOnTop(map);
 }
@@ -180,8 +182,9 @@ function showClusters(map, champ, globalB) {
         if (map.getSource(src)) {
             map.getSource(src).setData(fc);
             if (map.getLayer('coeff-cluster-circle')) map.setPaintProperty('coeff-cluster-circle', 'circle-color', color);
+            const clVis = isHidden('coeff') ? 'none' : 'visible';
             ['coeff-cluster-circle','coeff-cluster-cluster','coeff-cluster-count'].forEach(id => {
-                if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'visible');
+                if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', clVis);
             });
         } else {
             map.addSource(src, { type: 'geojson', data: fc, cluster: true, clusterRadius: 35, clusterMaxZoom: MIN_ZOOM - 1 });

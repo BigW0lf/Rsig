@@ -232,17 +232,26 @@ export function initTaux(map) {
                     if (!zone || !b) { if (zone) zone.remove(); return; }
                     const rang = b.rang_desc;
                     const nb   = b.nb_communes;
-                    const pct  = b.pct_rang;
-                    const tagCls = pct <= 20 ? 'tag-up' : pct >= 80 ? 'tag-down' : '';
+                    const pct  = +b.pct_rang;
+                    // pct_rang = rang / nb * 100 : 1% = commune la + taxée, 99% = la - taxée
+                    const tagCls = pct <= 25 ? 'tag-down' : pct >= 75 ? 'tag-up' : '';
+                    const position = pct <= 10  ? 'parmi les 10% les plus élevés du dép.'
+                                   : pct <= 25  ? 'parmi les 25% les plus élevés du dép.'
+                                   : pct >= 90  ? 'parmi les 10% les plus bas du dép.'
+                                   : pct >= 75  ? 'parmi les 25% les plus bas du dép.'
+                                   : 'dans la moyenne du dép.';
+                    const ecartMed = b.mediane ? ((+b.val_commune - +b.mediane) / +b.mediane * 100).toFixed(1) : null;
+                    const ecartCls = ecartMed > 0 ? 'tag-down' : ecartMed < 0 ? 'tag-up' : '';
                     const evolRows = (b.evolution ?? []).map(r =>
                         `<tr><td>${r.millesime}</td><td>${(+r.val).toFixed(4)} %</td></tr>`
                     ).join('');
                     zone.outerHTML = `
                         <details open style="margin-top:6px">
                             <summary style="cursor:pointer;font-weight:600;font-size:11px">Benchmark département</summary>
-                            ${irow('Rang dans le dép.', `<span class="${tagCls}">${rang} / ${nb} (top ${pct} %)</span>`)}
+                            <div class="info-row"><span class="info-label">Classement</span><span class="info-value"><span class="${tagCls}">${rang}ᵉ / ${nb} communes</span></span></div>
+                            <div class="info-row"><span class="info-label" style="font-size:10px;font-style:italic">${position}</span></div>
+                            ${ecartMed !== null ? `<div class="info-row"><span class="info-label">Écart à la médiane</span><span class="info-value ${ecartCls}">${ecartMed > 0 ? '+' : ''}${ecartMed} %</span></div>` : ''}
                             ${irow('Médiane dép.', fmt(b.mediane))}
-                            ${irow('Moyenne dép.', fmt(b.moyenne))}
                             ${irow('Min / Max', `${fmt(b.min_val)} / ${fmt(b.max_val)}`)}
                             ${evolRows ? `<table class="evol-table" style="margin-top:4px"><tr><th>Millésime</th><th>${label}</th></tr>${evolRows}</table>` : ''}
                         </details>`;
