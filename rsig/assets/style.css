@@ -317,6 +317,14 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
     font-style: italic;
     margin-top: 1px;
 }
+.prospect-occ-row {
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border2);
+}
+.prospect-occ-row:last-child { border-bottom: none; }
+.prospect-occ-nom  { font-size: 12px; font-weight: 600; color: var(--text); }
+.prospect-occ-meta { font-size: 11px; color: var(--blue-light); }
+.prospect-occ-addr { font-size: 11px; color: var(--text3); }
 
 /* ── Légende bas-droite carte ─────────── */
 #legend {

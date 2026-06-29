@@ -429,6 +429,68 @@ Flight::route('GET /api/taux/departements', function () {
     Flight::json($result);
 });
 
+// ── Prospects coeff localisation ─────────────────────────────────────────
+
+Flight::route('GET /api/prospects', function () {
+    if (!isAdmin()) { Flight::json(['error' => 'Accès refusé'], 403); return; }
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $sql = "SELECT
+                idu, denomination, numero_siren, forme_juridique_abregee,
+                adresse, codecommune AS code_insee,
+                section, parcelle,
+                round(coeff_2017::numeric, 3) AS coeff_2017,
+                round(coeff_2024::numeric, 3) AS coeff_2024,
+                round(((coeff_2024 - coeff_2017) / NULLIF(coeff_2017, 0) * 100)::numeric) AS evol_pct,
+                round(area_batiments::numeric) AS surface_bati_m2,
+                array_to_string(usages_bat, ' | ') AS usages,
+                ST_AsGeoJSON(ST_Transform(ST_Centroid(geom), 4326), 6)::text AS geojson
+            FROM coeff_pm_bat_final
+            WHERE coeff_2017 IS NOT NULL AND coeff_2024 IS NOT NULL
+              AND coeff_2024 > coeff_2017
+              AND area_batiments > 500
+              AND nature_culture = 'S'
+              AND code_forme_juridique NOT IN (7210,7220,7113,7313,7346,7229,7344,4140,4110,7389,7348,7490,9900)
+              AND NOT ('Industriel' = ANY(usages_bat))
+            ORDER BY ((coeff_2024 - coeff_2017) / NULLIF(coeff_2017, 0)) DESC";
+    $stmt = $db->query($sql);
+    Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
+});
+
+Flight::route('GET /api/prospects/occupants', function () {
+    if (!isAdmin()) { Flight::json(['error' => 'Accès refusé'], 403); return; }
+    $idu = preg_replace('/[^A-Za-z0-9]/', '', Flight::request()->query['idu'] ?? '');
+    if (!$idu) { Flight::json([], 400); return; }
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $sql = "SELECT
+                e.siret, e.siren,
+                COALESCE(e.denominationusuelleetablissement, e.enseigne1etablissement) AS nom,
+                e.activiteprincipaleetablissement AS naf,
+                e.adresse,
+                e.codepostaletablissement AS cp,
+                e.libellecommuneetablissement AS ville,
+                CASE e.trancheeffectifsetablissement
+                    WHEN 'NN' THEN NULL  WHEN '00' THEN '0'   WHEN '01' THEN '1-2'
+                    WHEN '02' THEN '3-5' WHEN '03' THEN '6-9'  WHEN '11' THEN '10-19'
+                    WHEN '12' THEN '20-49' WHEN '21' THEN '50-99' WHEN '22' THEN '100-199'
+                    WHEN '31' THEN '200-249' WHEN '32' THEN '250-499' WHEN '41' THEN '500-999'
+                    WHEN '42' THEN '1000-1999' ELSE NULL
+                END AS effectifs
+            FROM coeff_pm_bat_final c
+            JOIN etablisement_siren_geo e ON ST_Within(e.geom, c.geom)
+            WHERE c.idu = :idu
+              AND e.etatadministratifetablissement = 'A'
+              AND LEFT(e.activiteprincipaleetablissement, 2) NOT IN (
+                  '01','02','03','05','06','07','08','09',
+                  '10','11','12','13','14','15','16','17','18','19',
+                  '20','21','22','23','24','25','26','27','28','29',
+                  '30','31','32','33'
+              )
+            ORDER BY e.trancheeffectifsetablissement DESC NULLS LAST";
+    $stmt = $db->prepare($sql);
+    $stmt->execute([':idu' => $idu]);
+    Flight::json($stmt->fetchAll(PDO::FETCH_ASSOC));
+});
+
 // Évolution d'un taux entre deux millésimes — retourne un GeoJSON communes/dep avec le delta
 Flight::route('GET /api/taux/evolution', function () {
     $champ  = validateChamp(Flight::request()->query['champ'] ?? '', TAUX_CHAMPS, 'taux_fb_commune_vote');

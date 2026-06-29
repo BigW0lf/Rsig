@@ -17,6 +17,7 @@ const ICONS = {
     ta:         'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 22V12h6v10',
     'ta-majore':'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
     dossiers:   'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z',
+    prospects:  'M21 21l-4.35-4.35M11 19A8 8 0 1 0 11 3a8 8 0 0 0 0 16zM11 8v6M8 11h6',
     'tsb-idf':  'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
     'tsb-paca': 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
     tass:       'M3 3h18v18H3zM9 9h6v6H9z',
@@ -63,9 +64,15 @@ const CATALOGUE = [
         ],
     },
     {
+        group: 'Commercial',
+        layers: [
+            { id: 'dossiers',   mapPrefix: 'dossiers',   label: 'Dossiers CRM',        optionsId: null, desc: 'Dossiers CRM géolocalisés' },
+            { id: 'prospects',  mapPrefix: 'prospects',  label: 'Prospects coeff loc.', optionsId: null, desc: 'Sociétés privées sur parcelles à coeff en hausse 2017→2024, bâti >500 m², hors industrie' },
+        ],
+    },
+    {
         group: 'Autres',
         layers: [
-            { id: 'dossiers', mapPrefix: 'dossiers', label: 'Dossiers',            optionsId: null,          desc: 'Dossiers CRM géolocalisés' },
             { id: 'zfu',      mapPrefix: 'zfu',      label: 'ZFU — Exo. TSB',     optionsId: null,          desc: 'Zones franches urbaines — exonération TSB' },
             { id: 'ortho',    mapPrefix: null, label: 'Ortho historique IGN', optionsId: null, desc: 'Campagnes d\'acquisition 2000-2025 + millésimes par département' },
         ],

@@ -3,7 +3,8 @@ import { updateWfs, initWfsClick } from './wfs.js';
 import { applyState, saveState, loadSavedState, readHashState, copyPermalink } from './state.js';
 import { initTaux }     from './layers/taux.js';
 import { initCoeff }    from './layers/coeff.js';
-import { initDossiers } from './layers/dossiers.js';
+import { initDossiers }  from './layers/dossiers.js';
+import { initProspects } from './layers/prospects.js';
 import { initTarifs }   from './layers/tarifs.js';
 import { initZfu }      from './layers/zfu.js';
 import { initTsb }      from './layers/tsb.js';
@@ -217,7 +218,8 @@ map.on('load', () => {
     // Filtre dossiers — doit être init avant initDossiers pour que setFullData soit disponible
     window._dossiersFilter = initDossiersFilter(map);
     initOrtho(map);
-    const dossiers = initDossiers(map);
+    const dossiers   = initDossiers(map);
+    const prospects  = initProspects(map);
     const tarifs   = initTarifs(map, catsReady);
     const sections = initSections(map);
     const cfe      = initCfe(map);
