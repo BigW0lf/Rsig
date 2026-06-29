@@ -170,6 +170,7 @@ function showClusters(map, champ, globalB) {
     const apiChamp = isEvol ? 'coeff_2026' : champ;
 
     const apply = fc => {
+        if (!active) return;
         if (!fc?.features?.length) return;
         fc.features.forEach(f => { f.properties._cv = isEvol ? null : +f.properties.valeur; });
         const breaks = globalB ?? computeBreaks(fc.features.map(f => f.properties._cv).filter(v => v != null && isFinite(v)), 6);
@@ -256,6 +257,7 @@ export function loadCoeff(map) {
 
     if (isEvol) {
         fetchLayer(`/api/coeff?bbox=${bboxParam(map)}`, fc => {
+            if (!active) return;
             polyCache = fc;
             if (!fc?.features?.length) return;
             fc.features.forEach(f => { f.properties._evol = getVal(f.properties, champ); });
@@ -266,7 +268,9 @@ export function loadCoeff(map) {
         });
     } else {
         getBreaks(champ, globalB => {
+            if (!active) return;
             fetchLayer(`/api/coeff?bbox=${bboxParam(map)}`, fc => {
+                if (!active) return;
                 polyCache = fc;
                 if (!fc?.features?.length) return;
                 fc.features.forEach(f => { f.properties[champ] = getVal(f.properties, champ); });
