@@ -442,7 +442,7 @@ Flight::route('GET /api/prospects', function () {
                 round(coeff_2024::numeric, 3) AS coeff_2024,
                 round(((coeff_2024 - coeff_2017) / NULLIF(coeff_2017, 0) * 100)::numeric) AS evol_pct,
                 round(area_batiments::numeric) AS surface_bati_m2,
-                array_to_string(usages_bat, ' | ') AS usages,
+                array_to_string(ARRAY(SELECT DISTINCT u FROM unnest(usages_bat) u), ' | ') AS usages,
                 ST_AsGeoJSON(ST_Transform(ST_Centroid(geom), 4326), 6)::text AS geojson
             FROM coeff_pm_bat_final
             WHERE coeff_2017 IS NOT NULL AND coeff_2024 IS NOT NULL
