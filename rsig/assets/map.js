@@ -16,9 +16,15 @@ import { initTf }                from './layers/tf.js';
 import { initOrtho, setCampagne } from './layers/ortho.js';
 import { initCatalogue }         from './catalogue.js';
 import { initDossiersFilter }    from './dossiers-filter.js';
+import { initMeasure }           from './measure.js';
+import { initOsm }              from './layers/osm.js';
 
 // Pré-charge les catégories tarifs avant que la carte soit prête
 const catsReady = fetch('/api/tarifs/categories').then(r => r.json()).catch(e => { console.warn('[rsig] categories', e); return []; });
+
+// Affiche le spinner dès le départ, bloque les interactions carte
+const _initSpinner = document.getElementById('map-spinner');
+if (_initSpinner) _initSpinner.style.display = 'flex';
 
 const map = new maplibregl.Map({
     container: 'map',
@@ -45,12 +51,18 @@ const map = new maplibregl.Map({
                     + '&LAYER=GEOGRAPHICALNAMES.NAMES'
                     + '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}'
                 ],
-                tileSize: 256, maxzoom: 19, attribution: 'IGN-F/Géoportail',
+                tileSize: 256, maxzoom: 18, attribution: 'IGN-F/Géoportail',
+            },
+            osm_tiles: {
+                type: 'raster',
+                tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                tileSize: 256, maxzoom: 19, attribution: '© OpenStreetMap contributors',
             },
         },
         layers: [
             { id: 'ign-ortho',  type: 'raster', source: 'ign_ortho' },
             { id: 'ign-labels', type: 'raster', source: 'ign_labels' },
+            { id: 'osm-tiles',  type: 'raster', source: 'osm_tiles', layout: { visibility: 'none' } },
         ],
     },
     center: [2.35, 46.6],
@@ -59,7 +71,7 @@ const map = new maplibregl.Map({
 
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-// ── Contrôle IGN — bas à droite ───────────────────────────
+// ── Contrôle fond de carte + POI — bas à droite ──────────
 const CAMPAGNES_CTRL = [
     { id: 'actuelle',  label: 'Actuelle (2024-2025)' },
     { id: '2021-2023', label: '2021 – 2023' },
@@ -69,58 +81,77 @@ const CAMPAGNES_CTRL = [
     { id: '2000-2005', label: '2000 – 2005' },
 ];
 
-class IgnControl {
+// Instance OSM exposée pour le contrôle
+let _osmInstance = null;
+function setOsmInstance(inst) { _osmInstance = inst; }
+
+class BasemapControl {
     onAdd(m) {
         this._map = m;
-        this._container = document.createElement('div');
-        this._container.className = 'maplibregl-ctrl';
-        this._container.style.cssText = [
-            'background:rgba(255,255,255,.88)',
-            'backdrop-filter:blur(4px)',
-            'padding:3px 8px',
-            'display:flex',
-            'align-items:center',
-            'gap:6px',
-            'border-radius:4px',
-            'box-shadow:0 1px 4px rgba(0,0,0,.15)',
-            'white-space:nowrap',
-        ].join(';');
+        const wrap = document.createElement('div');
+        wrap.className = 'maplibregl-ctrl basemap-ctrl';
 
-        // Logo IGN
-        const logo = document.createElement('span');
-        logo.innerHTML = `<svg width="24" height="12" viewBox="0 0 56 28"><rect width="56" height="28" rx="3" fill="#003189"/><text x="28" y="20" font-family="Arial" font-weight="700" font-size="16" fill="white" text-anchor="middle">IGN</text></svg>`;
-        logo.style.cssText = 'flex-shrink:0;display:flex;align-items:center;opacity:.9';
+        // ── Toggle Sat ↔ OSM ─────────────────────────────
+        const toggle = document.createElement('div');
+        toggle.className = 'bmc-toggle';
+        toggle.innerHTML = `<span class="bmc-opt bmc-opt--active" data-mode="sat">🛰 Sat</span><span class="bmc-slider"></span><span class="bmc-opt" data-mode="osm">🗺 OSM</span>`;
 
-        // Select campagne
-        const sel = document.createElement('select');
-        sel.id = 'ign-campagne-ctrl';
-        sel.style.cssText = 'font-size:10px;border:none;outline:none;background:transparent;cursor:pointer;color:#1a2332;padding:0';
+        const slider = toggle.querySelector('.bmc-slider');
+        let isSat = true;
+
+        const yearSel = document.createElement('select');
+        yearSel.id = 'ign-campagne-ctrl';
+        yearSel.className = 'bmc-select';
         CAMPAGNES_CTRL.forEach(c => {
             const opt = document.createElement('option');
-            opt.value = c.id;
-            opt.textContent = c.label;
-            sel.appendChild(opt);
+            opt.value = c.id; opt.textContent = c.label;
+            yearSel.appendChild(opt);
         });
-        sel.addEventListener('change', () => setCampagne(sel.value));
+        yearSel.addEventListener('change', () => setCampagne(yearSel.value));
 
-        // Séparateur
-        const sep = document.createElement('span');
-        sep.style.cssText = 'width:1px;height:14px;background:#d8dce4;flex-shrink:0';
+        function applyMode(sat) {
+            isSat = sat;
+            toggle.querySelectorAll('.bmc-opt').forEach(o =>
+                o.classList.toggle('bmc-opt--active', o.dataset.mode === (sat ? 'sat' : 'osm'))
+            );
+            slider.style.transform = sat ? 'translateX(0)' : 'translateX(100%)';
+            m.setLayoutProperty('ign-ortho',  'visibility', sat  ? 'visible' : 'none');
+            m.setLayoutProperty('ign-labels', 'visibility', sat  ? 'visible' : 'none');
+            m.setLayoutProperty('osm-tiles',  'visibility', !sat ? 'visible' : 'none');
+            yearSel.style.display = sat ? '' : 'none';
+        }
 
-        // Attribution
+        toggle.addEventListener('click', e => {
+            const t = e.target.closest('.bmc-opt');
+            if (t) applyMode(t.dataset.mode === 'sat');
+        });
+
+        // ── Toggle POI ────────────────────────────────────
+        const poiBtn = document.createElement('button');
+        poiBtn.className = 'bmc-poi-btn';
+        poiBtn.title = 'Afficher / masquer les points d\'intérêt OSM';
+        poiBtn.textContent = '📍';
+        let poiOn = false;
+        poiBtn.addEventListener('click', () => {
+            poiOn = !poiOn;
+            poiBtn.classList.toggle('bmc-poi-on', poiOn);
+            _osmInstance?.setActive(poiOn);
+        });
+
+        // ── Attribution ──────────────────────────────────
         const attr = document.createElement('span');
-        attr.style.cssText = 'font-size:10px;color:#666';
-        attr.textContent = '© IGN-F/Géoportail';
+        attr.className = 'bmc-attr';
+        attr.innerHTML = '© OSM · IGN';
 
-        this._container.appendChild(logo);
-        this._container.appendChild(sel);
-        this._container.appendChild(sep);
-        this._container.appendChild(attr);
-        return this._container;
+        wrap.appendChild(toggle);
+        wrap.appendChild(yearSel);
+        wrap.appendChild(poiBtn);
+        wrap.appendChild(attr);
+        return wrap;
     }
-    onRemove() { this._container.parentNode?.removeChild(this._container); }
+    onRemove() { this._container?.parentNode?.removeChild(this._container); }
 }
-map.addControl(new IgnControl(), 'bottom-right');
+map.addControl(new BasemapControl(), 'bottom-right');
 
 // ── Pin géocodage (appelé depuis accueil.php) ─────────────
 let searchMarker = null;
@@ -167,7 +198,10 @@ window.afficherSurCarte = function (lat, lon, classif) {
 };
 
 map.on('load', () => {
+    if (_initSpinner) _initSpinner.style.display = 'none';
+
     initCatalogue(map);
+    initMeasure(map);
     initWfsClick(map);
 
     // ── Bouton permalien ─────────────────────────────────
@@ -188,6 +222,15 @@ map.on('load', () => {
     const sections = initSections(map);
     const cfe      = initCfe(map);
     const tf       = initTf(map);
+    const osm      = initOsm(map);
+    setOsmInstance(osm);
+
+    // Exposé pour la barre de recherche et catalogue (script inline / modules)
+    window.isOsmActive   = () => osm.isActive();
+    window.osmClosePopup = () => osm.closePopup();
+    window.zoomOnPoi    = (lat, lon) => {
+        map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 16), duration: 1200, essential: true });
+    };
 
     // Peupler le select catégorie CFE et TF (même liste) (même liste que tarifs)
     catsReady.then(cats => {
@@ -215,6 +258,11 @@ map.on('load', () => {
         if (taMajore.isActive()) taMajore.load();
         saveState(map);
     }, 200));
+
+    // OSM Overpass : debounce long séparé pour ne pas saturer l'API publique
+    map.on('moveend', debounce(() => {
+        if (osm.isActive()) osm.load();
+    }, 1200));
 
     updateWfs(map);
 

@@ -1,4 +1,6 @@
 import { showSpinner, hideSpinner } from './utils.js';
+import { isMeasuring } from './measure.js';
+import { hasVisibleLayer } from './catalogue.js';
 
 // ── Cache millésimes ortho par département ────────────────────────────────────
 const _orthoCache = {}; // campagne → { code_dep: annee_acq }
@@ -78,9 +80,11 @@ const labelField = {
     parcelles: ['get', 'numero'],
 };
 
-let ctrl     = null;
-let lastType = null;
-let lastBbox = null;
+let ctrl      = null;
+let lastType  = null;
+let lastBbox  = null;
+let lastFetch = 0;
+const MAX_CACHE_AGE = 5 * 60 * 1000; // 5 minutes
 
 export function getWfsType(zoom) {
     if (zoom < 9)  return 'departements';
@@ -99,11 +103,14 @@ export function updateWfs(map) {
     const b    = map.getBounds();
     const bbox = `${b.getWest().toFixed(4)},${b.getSouth().toFixed(4)},${b.getEast().toFixed(4)},${b.getNorth().toFixed(4)}`;
 
+    const now = performance.now();
+    const cacheExpired = (now - lastFetch) > MAX_CACHE_AGE;
+
     if (type === 'departements') {
-        if (lastType === 'departements') return;
+        if (lastType === 'departements' && !cacheExpired) return;
         lastBbox = null;
     } else {
-        if (type === lastType && lastBbox) {
+        if (type === lastType && lastBbox && !cacheExpired) {
             // Comparer les centres — ne recharger que si déplacement > seuil
             const prev = lastBbox.split(',').map(Number);
             const cur  = bbox.split(',').map(Number);
@@ -112,8 +119,9 @@ export function updateWfs(map) {
             if (dLng < MIN_DELTA[type] && dLat < MIN_DELTA[type]) return;
         }
     }
-    lastType = type;
-    lastBbox = bbox;
+    lastType  = type;
+    lastBbox  = bbox;
+    lastFetch = now;
 
     if (ctrl) ctrl.abort();
     ctrl = new AbortController();
@@ -156,7 +164,7 @@ export function updateWfs(map) {
             map.addLayer({ id: 'wfs-labels', type: 'symbol', source: 'wfs-src',
                 layout: {
                     'text-field': ['literal', ''], 'text-size': 10,
-                    'text-font': ['Noto Sans Regular'], 'text-max-width': 4,
+                    'text-font': ['Noto Sans Regular'], 'text-max-width': 8,
                     'text-allow-overlap': false,
                 },
                 paint: { 'text-color': '#1a2332', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5, 'text-opacity': 0.8 }
@@ -176,6 +184,10 @@ export function initWfsClick(map) {
     let _popup = null;
 
     map.on('click', 'wfs-fill', async (e) => {
+        if (isMeasuring()) return;
+        if (hasVisibleLayer()) return;
+        // Ne pas afficher le popup cadastral si un POI OSM est au même point
+        if (map.queryRenderedFeatures(e.point, { layers: ['osm-point'] }).length) return;
         const f = e.features?.[0];
         if (!f) return;
 
@@ -183,25 +195,25 @@ export function initWfsClick(map) {
         const props = f.properties;
         const rows  = featureProps(type, props).filter(([, v]) => v != null && v !== '');
 
-        // Récupérer la date ortho — code_dep direct si dispo, sinon préfixe du code_insee
-        let codeDep = props.code_dep ?? null;
-        if (!codeDep && props.code_insee) {
-            const insee = String(props.code_insee);
-            codeDep = ['971','972','973','974','976'].some(d => insee.startsWith(d))
-                ? insee.slice(0, 3)
-                : insee.slice(0, 2);
-        }
-        // Pour les départements, code_dep = code_insee directement
-        if (type === 'departements') codeDep = props.code_insee;
-
+        // Infos ortho uniquement en mode satellite (osm-tiles masqué)
+        const isSat = map.getLayoutProperty('osm-tiles', 'visibility') !== 'visible';
         let orthoHtml = '';
-        if (codeDep) {
-            const annee = await getOrthoAnnee(codeDep);
-            const sel = document.getElementById('ign-campagne-ctrl');
-            const camp = sel?.options[sel.selectedIndex]?.text || '';
-            if (annee) orthoHtml = `<div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,.1);font-size:11px;color:#555">
-                📸 Ortho <strong>${camp}</strong> : <strong>${annee}</strong>
-            </div>`;
+        if (isSat) {
+            let codeDep = props.code_dep ?? null;
+            if (!codeDep && props.code_insee) {
+                const insee = String(props.code_insee);
+                codeDep = ['971','972','973','974','976'].some(d => insee.startsWith(d))
+                    ? insee.slice(0, 3) : insee.slice(0, 2);
+            }
+            if (type === 'departements') codeDep = props.code_insee;
+            if (codeDep) {
+                const annee = await getOrthoAnnee(codeDep);
+                const sel   = document.getElementById('ign-campagne-ctrl');
+                const camp  = sel?.options[sel.selectedIndex]?.text || '';
+                if (annee) orthoHtml = `<div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,.1);font-size:11px;color:#555">
+                    📸 Ortho <strong>${camp}</strong> : <strong>${annee}</strong>
+                </div>`;
+            }
         }
 
         const tableRows = rows.map(([l, v]) =>
@@ -220,6 +232,11 @@ export function initWfsClick(map) {
             .setLngLat(e.lngLat)
             .setHTML(html)
             .addTo(map);
+    });
+
+    // Fermer le popup WFS si l'utilisateur bascule le fond de carte
+    map.on('layoutproperty', () => {
+        if (_popup) { _popup.remove(); _popup = null; }
     });
 
     map.on('mouseenter', 'wfs-fill', () => {

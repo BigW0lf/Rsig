@@ -7,6 +7,7 @@ let abortCtrl = null;
 let loadId = 0;
 const deptCache   = {};
 const breaksCache = {};
+let _lastLevel = null;
 
 const DEPT_ZOOM = 11;
 
@@ -86,6 +87,15 @@ export function loadTf(map) {
 
     const zoom  = map.getZoom();
     const level = zoom < DEPT_ZOOM ? 'dept' : 'commune';
+
+    // Purger les breaks de l'ancien niveau quand on change de niveau
+    if (_lastLevel && _lastLevel !== level) {
+        Object.keys(breaksCache).forEach(k => {
+            if (k.endsWith('_' + _lastLevel)) delete breaksCache[k];
+        });
+    }
+    _lastLevel = level;
+
     const myId  = ++loadId;
 
     const render = (fc, renderLevel) => {

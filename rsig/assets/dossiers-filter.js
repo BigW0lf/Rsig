@@ -501,5 +501,9 @@ export function initDossiersFilter(map) {
         getContainer() {
             return _container;
         },
+        /** Call when layer is deactivated — frees GeoJSON memory */
+        reset() {
+            _fullGeoJSON = null;
+        },
     };
 }

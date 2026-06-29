@@ -9,9 +9,9 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 header("Content-Security-Policy: default-src 'self'; "
     . "script-src 'self' 'unsafe-inline' https://unpkg.com; "
     . "style-src 'self' 'unsafe-inline' https://unpkg.com; "
-    . "img-src 'self' data: blob: https://data.geopf.fr https://wxs.ign.fr; "
+    . "img-src 'self' data: blob: https://data.geopf.fr https://wxs.ign.fr https://tile.openstreetmap.org https://*.tile.openstreetmap.org; "
     . "font-src 'self' https://demotiles.maplibre.org; "
-    . "connect-src 'self' https://data.geopf.fr https://wxs.ign.fr https://rtaxes.api.crm4.dynamics.com https://login.microsoftonline.com; "
+    . "connect-src 'self' https://data.geopf.fr https://wxs.ign.fr https://rtaxes.api.crm4.dynamics.com https://login.microsoftonline.com https://overpass-api.de https://demotiles.maplibre.org https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://nominatim.openstreetmap.org; "
     . "worker-src blob:; "
     . "frame-ancestors 'self'");
 

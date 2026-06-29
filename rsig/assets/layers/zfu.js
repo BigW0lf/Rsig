@@ -1,4 +1,5 @@
 import { showSpinner, hideSpinner, bddOnTop, apiFetch } from '../utils.js';
+import { isMeasuring } from '../measure.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 
@@ -37,7 +38,7 @@ export function initZfu(map) {
     const toggle = document.getElementById('toggle-zfu');
 
     map.on('click', 'zfu-fill', e => {
-        if (!active) return;
+        if (!active || isMeasuring()) return;
         const p = e.features[0].properties;
         showInfo('zfu', `ZFU — ${p.nom_quartier}`,
             irow('Code quartier', p.codquart) +

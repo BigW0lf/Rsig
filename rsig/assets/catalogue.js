@@ -32,7 +32,7 @@ const SVG_CHEVRON_RT = `<svg width="11" height="11" viewBox="0 0 24 24" fill="no
 // mapPrefix: préfixe des couches MapLibre (pour l'œil). null = pas de layer MapLibre direct.
 const CATALOGUE = [
     {
-        group: 'Valeur locative',
+        group: 'Val. locative — Pro',
         layers: [
             { id: 'sections', mapPrefix: 'sections', label: 'Secteurs cadastraux',  optionsId: 'sections-options', desc: 'Sections et tarifs pivot sections_2025' },
             { id: 'coeff',    mapPrefix: 'coeff',    label: 'Coeff. localisation',  optionsId: 'coeff-options',    desc: 'Coefficients de localisation foncière' },
@@ -41,7 +41,7 @@ const CATALOGUE = [
         ],
     },
     {
-        group: 'Estimation €/m²',
+        group: 'Estimation €/m² — Pro',
         layers: [
             { id: 'cfe', mapPrefix: 'cfe', label: 'CFE estimée €/m²', optionsId: 'cfe-options', desc: 'Cotisation foncière des entreprises estimée' },
             { id: 'tf',  mapPrefix: 'tf',  label: 'TF estimée €/m²',  optionsId: 'tf-options',  desc: 'Taxe foncière estimée par catégorie d\'activité' },
@@ -65,9 +65,9 @@ const CATALOGUE = [
     {
         group: 'Autres',
         layers: [
-            { id: 'dossiers', mapPrefix: 'dossiers', label: 'Dossiers',       optionsId: null, desc: 'Dossiers CRM géolocalisés' },
-            { id: 'zfu',      mapPrefix: 'zfu',      label: 'ZFU — Exo. TSB', optionsId: null, desc: 'Zones franches urbaines — exonération TSB' },
-            { id: 'ortho',    mapPrefix: null,        label: 'Ortho historique IGN', optionsId: null, desc: 'Campagnes d\'acquisition 2000-2025 + millésimes par département' },
+            { id: 'dossiers', mapPrefix: 'dossiers', label: 'Dossiers',            optionsId: null,          desc: 'Dossiers CRM géolocalisés' },
+            { id: 'zfu',      mapPrefix: 'zfu',      label: 'ZFU — Exo. TSB',     optionsId: null,          desc: 'Zones franches urbaines — exonération TSB' },
+            { id: 'ortho',    mapPrefix: null, label: 'Ortho historique IGN', optionsId: null, desc: 'Campagnes d\'acquisition 2000-2025 + millésimes par département' },
         ],
     },
 ];
@@ -100,6 +100,14 @@ function countActive() {
         const cb = getToggle(l.id);
         return cb && cb.checked;
     }).length;
+}
+
+// Retourne true si au moins une couche est active ET visible (non masquée par l'œil)
+export function hasVisibleLayer() {
+    return CATALOGUE.flatMap(g => g.layers).some(l => {
+        const cb = getToggle(l.id);
+        return cb && cb.checked && !_hidden[l.id];
+    });
 }
 
 function updateBadge() {
@@ -145,12 +153,12 @@ function buildRepertoirePane() {
         // Header cliquable
         const header = document.createElement('button');
         header.className = 'cat-group-header';
-        header.innerHTML = `<span class="cat-group-chevron">${collapsed ? SVG_CHEVRON_RT : SVG_CHEVRON_DN}</span><span>${group.group}</span><span class="cat-group-count"></span>`;
+        header.innerHTML = `<span class="cat-group-chevron${collapsed ? '' : ' chevron-open'}">${SVG_CHEVRON_RT}</span><span>${group.group}</span><span class="cat-group-count"></span>`;
         header.addEventListener('click', () => {
             const isNowCollapsed = !groupEl.classList.contains('cat-group-collapsed');
             _groupCollapsed[group.group] = isNowCollapsed;
             groupEl.classList.toggle('cat-group-collapsed', isNowCollapsed);
-            header.querySelector('.cat-group-chevron').innerHTML = isNowCollapsed ? SVG_CHEVRON_RT : SVG_CHEVRON_DN;
+            header.querySelector('.cat-group-chevron').classList.toggle('chevron-open', !isNowCollapsed);
         });
         groupEl.appendChild(header);
 
@@ -298,17 +306,17 @@ function refreshCouchesPane() {
             }
         }
 
-        // Bouton chevron — référence directe à cardBody (pas de clone)
+        // Bouton chevron — rotation CSS plutôt que swap innerHTML
         if (hasOptions && cardBody) {
             const chevronBtn = document.createElement('button');
-            chevronBtn.className = 'cat-btn-chevron';
+            chevronBtn.className = 'cat-btn-chevron' + (bodyCollapsed ? '' : ' chevron-open');
             chevronBtn.title = bodyCollapsed ? 'Voir les options' : 'Réduire';
-            chevronBtn.innerHTML = bodyCollapsed ? SVG_CHEVRON_RT : SVG_CHEVRON_DN;
+            chevronBtn.innerHTML = SVG_CHEVRON_RT;
             chevronBtn.addEventListener('click', () => {
                 _cardCollapsed[layer.id] = !_cardCollapsed[layer.id];
                 const nowCollapsed = _cardCollapsed[layer.id];
                 cardBody.style.display = nowCollapsed ? 'none' : 'block';
-                chevronBtn.innerHTML = nowCollapsed ? SVG_CHEVRON_RT : SVG_CHEVRON_DN;
+                chevronBtn.classList.toggle('chevron-open', !nowCollapsed);
                 chevronBtn.title = nowCollapsed ? 'Voir les options' : 'Réduire';
             });
             head.appendChild(chevronBtn);
@@ -465,6 +473,8 @@ function injectStyles() {
 }
 .cat-group-header:hover { background: var(--blue-hover); color: var(--text); }
 .cat-group-chevron { display: flex; align-items: center; opacity: .6; flex-shrink: 0; }
+.cat-group-chevron svg { transition: transform .18s ease; }
+.cat-group-chevron.chevron-open svg { transform: rotate(90deg); }
 .cat-group-header > span:nth-child(2) { flex: 1; }
 .cat-group-body { overflow: hidden; }
 .cat-group-collapsed .cat-group-body { display: none; }
@@ -548,6 +558,8 @@ function injectStyles() {
     transition: background .12s, color .12s;
 }
 .cat-btn-chevron:hover { background: var(--blue-hover); color: var(--blue-light); border-color: var(--border); }
+.cat-btn-chevron svg { transition: transform .18s ease; }
+.cat-btn-chevron.chevron-open svg { transform: rotate(90deg); }
 .cat-btn-remove {
     width: 22px; height: 22px;
     display: flex; align-items: center; justify-content: center;

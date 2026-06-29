@@ -123,8 +123,8 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
    PANNEAU GAUCHE
 ═══════════════════════════════════════ */
 #panel-left {
-    width: 250px;
-    min-width: 250px;
+    width: 210px;
+    min-width: 210px;
     background: var(--surface);
     border-right: 1px solid var(--border);
     overflow: hidden;
@@ -137,8 +137,8 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
 .panel-left-head {
     background: var(--blue);
     color: #fff;
-    padding: 10px 12px 8px;
-    font-size: 11px;
+    padding: 7px 10px 6px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .8px;
@@ -186,6 +186,20 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
 }
 #search-clear:hover { opacity: 1; }
 
+#search-spinner {
+    position: absolute;
+    right: 10px; top: 50%; transform: translateY(-50%);
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--blue-light);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    display: none;
+    will-change: transform;
+}
+#search-wrap.searching #search-spinner { display: block; }
+#search-wrap.searching #search-clear  { display: none !important; }
+
 .dropdown {
     position: absolute;
     top: calc(100% + 4px);
@@ -221,16 +235,16 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
 
 /* ── Couches ─────────────────────────── */
 .layer-row {
-    padding: 7px 12px 7px 16px;
+    padding: 5px 8px 5px 10px;
     border-bottom: 1px solid var(--border2);
 }
 
 .layer-toggle {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 5px;
     cursor: pointer;
-    font-size: 0.84rem;
+    font-size: 0.78rem;
     font-weight: 500;
     color: var(--text);
     user-select: none;
@@ -247,8 +261,8 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
 .layer-row-label--static {
     display: flex;
     align-items: center;
-    gap: 7px;
-    font-size: 0.84rem;
+    gap: 5px;
+    font-size: 0.78rem;
     font-weight: 500;
     color: var(--text3);
 }
@@ -262,21 +276,21 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
 }
 
 .layer-sub {
-    margin: 6px 0 2px 21px;
+    margin: 4px 0 2px 16px;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 4px;
 }
 .layer-sub label {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--text3);
     display: flex;
     flex-direction: column;
     gap: 2px;
 }
 .layer-sub select {
-    font-size: 0.82rem;
-    padding: 4px 7px;
+    font-size: 0.77rem;
+    padding: 3px 5px;
     border: 1px solid var(--border);
     border-radius: 4px;
     background: var(--surface2);
@@ -294,7 +308,7 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
 /* ── Légende bas-droite carte ─────────── */
 #legend {
     position: absolute;
-    bottom: 28px;
+    bottom: 58px;
     right: 14px;
     z-index: 800;
     background: rgba(255,255,255,.94);
@@ -304,11 +318,16 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
     min-width: 150px;
     box-shadow: var(--shadow);
     pointer-events: none;
-    transition: right .18s ease;
+    transition: right .18s ease, opacity .18s ease;
+    opacity: 1;
+}
+#legend.legend-hidden {
+    opacity: 0;
+    pointer-events: none;
 }
 /* Décale la légende quand le panneau droit est ouvert (classe posée par JS) */
 #legend.legend-shifted {
-    right: 304px;
+    right: 264px;
 }
 
 #legend-title {
@@ -361,30 +380,37 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
 
 #map { width: 100%; height: 100%; position: relative; }
 
+
 #map-spinner {
     display: none;
     position: absolute;
-    bottom: 72px;
-    right: 14px;
+    inset: 0;
     z-index: 900;
-    background: rgba(255,255,255,.92);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 6px 14px;
+    background: rgba(160,165,175,.35);
+    flex-direction: column;
     align-items: center;
-    gap: 8px;
-    font-size: 0.8rem;
-    color: var(--text2);
-    box-shadow: var(--shadow-sm);
+    justify-content: center;
+    gap: 10px;
+    pointer-events: none;
 }
 
 .spinner-ring {
-    width: 14px; height: 14px;
-    border: 2px solid var(--border);
-    border-top-color: var(--blue-light);
+    width: 32px; height: 32px;
+    border: 3px solid rgba(255,255,255,.5);
+    border-top-color: #fff;
     border-radius: 50%;
-    animation: spin .7s linear infinite;
+    animation: spin .8s linear infinite;
     flex-shrink: 0;
+    will-change: transform;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,.3));
+}
+
+#map-spinner span {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,.4);
+    letter-spacing: .02em;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -392,7 +418,7 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
    PANNEAU DROIT
 ═══════════════════════════════════════ */
 #panel-right {
-    width: 290px;
+    width: 250px;
     background: var(--surface);
     border-left: 1px solid var(--border);
     overflow-y: auto;
@@ -418,10 +444,10 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
 .panel-right-head {
     background: var(--blue);
     color: #fff;
-    padding: 10px 36px 8px 12px;
-    font-size: 12px;
+    padding: 7px 30px 6px 10px;
+    font-size: 11px;
     font-weight: 600;
-    min-height: 38px;
+    min-height: 30px;
     line-height: 1.3;
     word-break: break-word;
 }
@@ -442,15 +468,15 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
 }
 #close-right:hover { background: rgba(255,255,255,.35); }
 
-#info-content { padding: 4px 0 12px; flex: 1; }
+#info-content { padding: 2px 0 8px; flex: 1; }
 
 .info-row {
-    padding: 6px 12px;
+    padding: 4px 10px;
     border-bottom: 1px solid var(--border2);
 }
 .info-row:last-child { border-bottom: none; }
 .info-label {
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: .4px;
@@ -459,7 +485,7 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
     margin-bottom: 1px;
 }
 .info-value {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text);
     word-break: break-word;
 }
@@ -740,3 +766,166 @@ tbody tr:hover td { background: var(--blue-hover); }
 
 /* util */
 .hidden { display: none !important; }
+
+/* ═══════════════════════════════════════
+   CONTRÔLE FOND DE CARTE (bas-droite)
+═══════════════════════════════════════ */
+.basemap-ctrl {
+    background: rgba(255,255,255,.93);
+    backdrop-filter: blur(4px);
+    border-radius: 6px;
+    box-shadow: 0 1px 5px rgba(0,0,0,.16);
+    padding: 4px 8px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+/* Toggle Sat / OSM */
+.bmc-toggle {
+    display: flex;
+    align-items: center;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2px;
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+    gap: 0;
+    flex-shrink: 0;
+}
+.bmc-opt {
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text3);
+    position: relative;
+    z-index: 1;
+    cursor: pointer;
+    transition: color .15s;
+}
+.bmc-opt--active { color: #fff; }
+.bmc-slider {
+    position: absolute;
+    top: 2px; bottom: 2px;
+    width: calc(50% - 2px);
+    left: 2px;
+    background: var(--blue);
+    border-radius: 12px;
+    transition: transform .2s ease;
+    z-index: 0;
+}
+
+/* Select années */
+.bmc-select {
+    font-size: 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface2);
+    color: var(--text);
+    padding: 2px 4px;
+    outline: none;
+    cursor: pointer;
+    max-width: 130px;
+}
+.bmc-select:focus { border-color: var(--blue-light); }
+
+/* Bouton POI */
+.bmc-poi-btn {
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--surface2);
+    font-size: 14px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background .12s, border-color .12s;
+    title: 'Points d\'intérêt';
+}
+.bmc-poi-btn:hover    { background: var(--blue-hover); border-color: var(--blue-light); }
+.bmc-poi-btn.bmc-poi-on { background: var(--blue); border-color: var(--blue); }
+
+/* Attribution */
+.bmc-attr {
+    font-size: 9px;
+    color: var(--text3);
+    flex-shrink: 0;
+}
+.bmc-attr a { color: var(--text3); }
+
+/* ═══════════════════════════════════════
+   OUTIL MESURE
+═══════════════════════════════════════ */
+#measure-panel {
+    position: absolute;
+    bottom: 72px;
+    left: 14px;
+    z-index: 900;
+    background: rgba(255,255,255,.96);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px 8px;
+    min-width: 200px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 12px;
+}
+
+#measure-mode-btns {
+    display: flex;
+    gap: 4px;
+}
+
+.measure-mode {
+    flex: 1;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface2);
+    color: var(--text2);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+}
+.measure-mode:hover { background: var(--blue-hover); color: var(--blue); }
+.measure-mode.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+#measure-result {
+    font-size: 12px;
+    color: var(--text2);
+    min-height: 18px;
+    line-height: 1.4;
+}
+#measure-result strong {
+    font-size: 14px;
+    color: var(--blue);
+}
+
+#measure-actions {
+    display: flex;
+    gap: 4px;
+    justify-content: flex-end;
+}
+#measure-clear, #measure-finish {
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    font-size: 11px;
+    cursor: pointer;
+    transition: background .12s;
+}
+#measure-clear  { background: var(--surface2); color: var(--text3); }
+#measure-clear:hover  { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+#measure-finish { background: var(--blue); color: #fff; border-color: var(--blue); display: none; }
+#measure-finish:hover { background: var(--blue-light); }
+
+.measure-toggle-active { background: var(--blue-hover) !important; color: var(--blue) !important; }

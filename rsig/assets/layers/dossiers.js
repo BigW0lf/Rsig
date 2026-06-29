@@ -1,4 +1,5 @@
 import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop, apiFetch } from '../utils.js';
+import { isMeasuring } from '../measure.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow, irowHtml } from '../panel.js';
 
@@ -14,9 +15,9 @@ export function loadDossiers(map) {
             hideSpinner();
             if (!active || !fc?.features?.length) return;
 
-            // Enregistrer le dataset complet dans le filtre si disponible
+            // Enregistrer le dataset complet dans le filtre si disponible (une seule fois)
             const filter = window._dossiersFilter;
-            if (filter) filter.setFullData(fc);
+            if (filter && !loaded) filter.setFullData(fc);
 
             // Appliquer les filtres éventuellement déjà posés avant le chargement
             const displayFc = filter ? filter.applyFilters(fc) : fc;
@@ -38,7 +39,7 @@ export function loadDossiers(map) {
                 } });
             map.addLayer({ id: 'dossiers-cluster-count', type: 'symbol', source: 'dossiers-src',
                 filter: ['has', 'point_count'],
-                layout: { 'text-field': '{point_count_abbreviated}', 'text-font': ['Noto Sans Regular'], 'text-size': 11 },
+                layout: { 'text-field': ['concat', ['to-string', ['get', 'point_count']], ''], 'text-font': ['Noto Sans Regular'], 'text-size': 11 },
                 paint: { 'text-color': '#fff' } });
 
             loaded = true;
@@ -51,6 +52,7 @@ export function loadDossiers(map) {
             map.on('mouseleave', 'dossiers-cluster', () => map.getCanvas().style.cursor = '');
 
             map.on('click', 'dossiers-cluster', e => {
+                if (isMeasuring()) return;
                 const feat = map.queryRenderedFeatures(e.point, { layers: ['dossiers-cluster'] });
                 map.getSource('dossiers-src').getClusterExpansionZoom(feat[0].properties.cluster_id, (err, zoom) => {
                     if (!err) map.easeTo({ center: feat[0].geometry.coordinates, zoom });
@@ -64,7 +66,7 @@ export function initDossiers(map) {
     const toggle = document.getElementById('toggle-dossiers');
 
     map.on('click', 'dossiers-circle', e => {
-        if (!active) return;
+        if (!active || isMeasuring()) return;
         const p  = e.features[0].properties;
         const tf = +p.montant_tf;
         const etatCls = p.etat === '+' ? 'color:#16a34a' : p.etat === '-' ? 'color:#dc2626' : 'color:inherit';
@@ -92,6 +94,7 @@ export function initDossiers(map) {
             loaded = false;
             dropLegend('dossiers');
             clearInfo('dossiers');
+            window._dossiersFilter?.reset?.();
         } else {
             loadDossiers(map);
         }

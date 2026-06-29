@@ -122,7 +122,11 @@ export function bddOnTop(map) {
         ['ta-maj-cluster','ta-maj-cluster-count','ta-maj-point'].forEach(id => {
             if (m.getLayer(id)) m.moveLayer(id);
         });
-        // 5. Dossiers — tout en haut
+        // 5. POI OSM
+        ['osm-point'].forEach(id => {
+            if (m.getLayer(id)) m.moveLayer(id);
+        });
+        // 6. Dossiers — tout en haut
         ['dossiers-circle','dossiers-cluster','dossiers-cluster-count'].forEach(id => {
             if (m.getLayer(id)) m.moveLayer(id);
         });

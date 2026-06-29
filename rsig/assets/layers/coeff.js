@@ -239,17 +239,30 @@ export function loadCoeff(map) {
 
     const isEvol = champ === 'evolution';
     const pal    = isEvol ? PAL.coeffEv : PAL.coeff;
-    getBreaks(champ, globalB => {
+
+    if (isEvol) {
+        // breaks calculés sur les vraies valeurs % pour que la légende soit correcte
         fetchLayer(`/api/coeff?bbox=${bboxParam(map)}`, fc => {
             polyCache = fc;
             if (!fc?.features?.length) return;
-            const propKey = isEvol ? '_evol' : champ;
-            fc.features.forEach(f => { f.properties[propKey] = getVal(f.properties, champ); });
-            const breaks = globalB ?? computeBreaks(fc.features.map(f => f.properties[propKey]).filter(v => v != null && isFinite(v)), 6);
-            upsertPoly(map, fc, pal[pal.length - 1], breaks, pal, propKey);
-            saveLegend('coeff', champEl.options[champEl.selectedIndex].text, breaks, pal, isEvol ? ' %' : '');
+            fc.features.forEach(f => { f.properties._evol = getVal(f.properties, champ); });
+            const vals   = fc.features.map(f => f.properties._evol).filter(v => v != null && isFinite(v));
+            const breaks = computeBreaks(vals, 6);
+            upsertPoly(map, fc, pal[pal.length - 1], breaks, pal, '_evol');
+            saveLegend('coeff', champEl.options[champEl.selectedIndex].text, breaks, pal, ' %');
         });
-    });
+    } else {
+        getBreaks(champ, globalB => {
+            fetchLayer(`/api/coeff?bbox=${bboxParam(map)}`, fc => {
+                polyCache = fc;
+                if (!fc?.features?.length) return;
+                fc.features.forEach(f => { f.properties[champ] = getVal(f.properties, champ); });
+                const breaks = globalB ?? computeBreaks(fc.features.map(f => f.properties[champ]).filter(v => v != null && isFinite(v)), 6);
+                upsertPoly(map, fc, pal[pal.length - 1], breaks, pal, champ);
+                saveLegend('coeff', champEl.options[champEl.selectedIndex].text, breaks, pal, '');
+            });
+        });
+    }
 }
 
 export function initCoeff(map) {

@@ -82,6 +82,23 @@
             </div>
 
             <div class="rsig-help-section">
+                <div class="rsig-help-title">POI OpenStreetMap</div>
+                <div class="rsig-help-row"><span>Activation</span><span>Répertoire → Autres → POI OpenStreetMap — nécessite zoom niveau 14+</span></div>
+                <div class="rsig-help-row"><span>Catégories</span><span>Restauration, Santé, Éducation, Services, Commerces, Tourisme…</span></div>
+                <div class="rsig-help-row"><span>Clic sur un POI</span><span>Affiche le nom, adresse, téléphone, site web, horaires dans le panneau droit</span></div>
+                <div class="rsig-help-row"><span>Clusters</span><span>Points regroupés à petite échelle — cliquer pour dézoomer</span></div>
+                <div class="rsig-help-row"><span>Source</span><span>Overpass API (OpenStreetMap) — données contributives</span></div>
+            </div>
+
+            <div class="rsig-help-section">
+                <div class="rsig-help-title">Outil de mesure</div>
+                <div class="rsig-help-row"><kbd>Bouton règle (haut droite)</kbd><span>Active l'outil de mesure</span></div>
+                <div class="rsig-help-row"><span>Distance</span><span>Cliquez pour poser des points, double-clic ou "Terminer" pour finir — distance totale affichée</span></div>
+                <div class="rsig-help-row"><span>Surface</span><span>Idem — 3 points minimum — surface en m², ha ou km²</span></div>
+                <div class="rsig-help-row"><span>Labels</span><span>Chaque segment affiche sa longueur sur la carte</span></div>
+            </div>
+
+            <div class="rsig-help-section">
                 <div class="rsig-help-title">Recherche d'adresse</div>
                 <div class="rsig-help-row"><span>Barre de recherche</span><span>Géocodage IGN — saisissez une adresse, une commune ou un code INSEE</span></div>
             </div>
@@ -505,11 +522,12 @@ kbd {
         </div>
         <div id="map"></div>
         <div id="search-wrap">
-            <input type="search" id="search" placeholder="🔍 Rechercher une adresse…" autocomplete="off">
+            <input type="search" id="search" placeholder="🔍 Rechercher une adresse ou un lieu…" autocomplete="off">
             <button id="search-clear" title="Effacer" style="display:none">✕</button>
+            <div id="search-spinner"></div>
             <div id="resultats" class="dropdown"></div>
         </div>
-        <div id="legend" class="hidden">
+        <div id="legend" class="legend-hidden">
             <div id="legend-title"></div>
             <div id="legend-items"></div>
         </div>
@@ -549,11 +567,62 @@ function histRemove(label) {
 }
 
 let searchTimer;
-let _currentResults = []; // [{label, lat, lon, class}]
+let _currentResults = []; // [{label, lat, lon, class, isPoi?}]
 let _focusIdx = -1;
 const input    = document.getElementById('search');
 const dropdown = document.getElementById('resultats');
 const clearBtn = document.getElementById('search-clear');
+
+// ── Recherche POI via Nominatim ───────────────────────────
+const POI_LABELS = {
+    restaurant:'Restaurant', cafe:'Café', bar:'Bar', pub:'Pub',
+    fast_food:'Restauration rapide', pharmacy:'Pharmacie',
+    hospital:'Hôpital', clinic:'Clinique', doctors:'Médecin',
+    dentist:'Dentiste', school:'École', university:'Université',
+    college:'Lycée', kindergarten:'Maternelle', library:'Bibliothèque',
+    bank:'Banque', atm:'Distributeur', post_office:'Bureau de poste',
+    fuel:'Station-service', police:'Police', fire_station:'Pompiers',
+    townhall:'Mairie', courthouse:'Tribunal', cinema:'Cinéma',
+    theatre:'Théâtre', place_of_worship:'Lieu de culte', museum:'Musée',
+    hotel:'Hôtel', supermarket:'Supermarché', convenience:'Épicerie',
+    bakery:'Boulangerie', butcher:'Boucherie', hairdresser:'Coiffeur',
+    car_repair:'Garage', park:'Parc', playground:'Aire de jeux',
+    sports_centre:'Centre sportif', swimming_pool:'Piscine',
+    attraction:'Attraction', viewpoint:'Point de vue',
+};
+// Classes Nominatim autorisées comme POI
+const NOM_POI_CLASSES = new Set(['amenity','shop','leisure','tourism']);
+
+async function searchPoi(q) {
+    const params = new URLSearchParams({
+        q, format: 'jsonv2', limit: 8,
+        countrycodes: 'fr',
+        addressdetails: 1,
+        'accept-language': 'fr',
+    });
+    try {
+        const r = await fetch('https://nominatim.openstreetmap.org/search?' + params, {
+            headers: { 'Accept': 'application/json', 'User-Agent': 'RSig/1.0' },
+            signal: AbortSignal.timeout(5000),
+        });
+        if (!r.ok) return [];
+        const data = await r.json();
+        return data
+            .filter(el => NOM_POI_CLASSES.has(el.class) && el.lat && el.lon)
+            .map(el => {
+                const key  = el.type || '';
+                const type = POI_LABELS[key] || el.class;
+                const addr = el.address;
+                const parts = [addr?.road, addr?.city || addr?.town || addr?.village].filter(Boolean).join(', ');
+                const name  = el.name || el.display_name.split(',')[0];
+                return {
+                    label: `📍 ${name}${parts ? ' — ' + parts : ''}${type ? ' (' + type + ')' : ''}`,
+                    lat: parseFloat(el.lat), lon: parseFloat(el.lon),
+                    class: 4, isPoi: true,
+                };
+            });
+    } catch { return []; }
+}
 
 function renderDropdown(items, isHistory) {
     _focusIdx = -1;
@@ -565,25 +634,47 @@ function renderDropdown(items, isHistory) {
         hdr.textContent = 'Recherches récentes';
         dropdown.appendChild(hdr);
     }
-    items.forEach((r, i) => {
-        const row = document.createElement('div');
-        row.className = 'item search-item';
-        row.dataset.idx = i;
-        row.innerHTML = isHistory
-            ? `<span style="opacity:.45;margin-right:6px;font-size:11px">🕐</span><span style="flex:1">${escHtml(r.label)}</span><button class="hist-del" data-label="${escHtml(r.label)}" title="Supprimer">✕</button>`
-            : escHtml(r.label);
-        row.addEventListener('mousedown', ev => {
-            if (ev.target.classList.contains('hist-del')) {
+
+    // Séparer adresses et POI
+    const adresses = items.filter(r => !r.isPoi);
+    const pois     = items.filter(r => r.isPoi);
+
+    function addSection(list, title) {
+        if (!list.length) return;
+        if (title && (adresses.length && pois.length)) {
+            const hdr = document.createElement('div');
+            hdr.style.cssText = 'padding:4px 12px 2px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);background:var(--surface2)';
+            hdr.textContent = title;
+            dropdown.appendChild(hdr);
+        }
+        list.forEach(r => {
+            const i = items.indexOf(r);
+            const row = document.createElement('div');
+            row.className = 'item search-item';
+            row.dataset.idx = i;
+            row.innerHTML = isHistory
+                ? `<span style="opacity:.45;margin-right:6px;font-size:11px">🕐</span><span style="flex:1">${escHtml(r.label)}</span><button class="hist-del" data-label="${escHtml(r.label)}" title="Supprimer">✕</button>`
+                : escHtml(r.label);
+            row.addEventListener('mousedown', ev => {
+                if (ev.target.classList.contains('hist-del')) {
+                    ev.preventDefault();
+                    histRemove(ev.target.dataset.label);
+                    renderDropdown(histLoad(), true);
+                    return;
+                }
                 ev.preventDefault();
-                histRemove(ev.target.dataset.label);
-                renderDropdown(histLoad(), true);
-                return;
-            }
-            ev.preventDefault();
-            selectResult(r);
+                selectResult(r);
+            });
+            dropdown.appendChild(row);
         });
-        dropdown.appendChild(row);
-    });
+    }
+
+    if (isHistory) {
+        addSection(items, null);
+    } else {
+        addSection(adresses, '📌 Adresses');
+        addSection(pois,     '📍 Points d\'intérêt');
+    }
     _currentResults = items;
 }
 
@@ -593,7 +684,11 @@ function selectResult(r) {
     dropdown.innerHTML = '';
     _focusIdx = -1;
     histAdd(r);
-    afficherSurCarte(r.lat, r.lon, r.class);
+    if (r.isPoi) {
+        window.zoomOnPoi?.(r.lat, r.lon);
+    } else {
+        afficherSurCarte(r.lat, r.lon, r.class);
+    }
 }
 
 function closeDropdown() {
@@ -613,17 +708,29 @@ input.addEventListener('input', function () {
     const val = this.value.trim();
     clearBtn.style.display = val ? 'flex' : 'none';
     if (!val) { renderDropdown(histLoad(), true); return; }
-    searchTimer = setTimeout(() => {
-        fetch('/search?barre=' + encodeURIComponent(val))
-            .then(r => r.json())
-            .then(data => {
-                if (!data.results?.length) {
-                    dropdown.innerHTML = "<div class='item' style='color:var(--text3)'>Aucun résultat</div>";
-                    _currentResults = [];
-                } else {
-                    renderDropdown(data.results, false);
-                }
-            }).catch(() => {});
+    const searchWrap = document.getElementById('search-wrap');
+    searchTimer = setTimeout(async () => {
+        searchWrap.classList.add('searching');
+        try {
+            const poiActive = window.isOsmActive?.() ?? false;
+
+            const [addrData, poiResults] = await Promise.all([
+                fetch('/search?barre=' + encodeURIComponent(val)).then(r => r.json()).catch(() => ({ results: [] })),
+                poiActive ? searchPoi(val) : Promise.resolve([]),
+            ]);
+
+            const adresses = addrData.results || [];
+            const all = [...adresses, ...poiResults];
+
+            if (!all.length) {
+                dropdown.innerHTML = "<div class='item' style='color:var(--text3)'>Aucun résultat</div>";
+                _currentResults = [];
+            } else {
+                renderDropdown(all, false);
+            }
+        } finally {
+            searchWrap.classList.remove('searching');
+        }
     }, 300);
 });
 

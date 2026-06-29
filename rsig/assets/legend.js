@@ -24,7 +24,7 @@ export function setLegendVisible(key, visible) {
 
 function _render() {
     const keys = ['taux', 'sections', 'coeff', 'cfe', 'tf', 'ta', 'ta-majore', 'tarifs', 'tsb-idf', 'tsb-paca', 'tass', 'zfu', 'dossiers'].filter(k => state[k] && !hidden.has(k));
-    if (!keys.length) { legendEl.classList.add('hidden'); return; }
+    if (!keys.length) { legendEl.classList.add('legend-hidden'); return; }
     legendItems.innerHTML = keys.map(k => {
         const { title, breaks, pal, suffix } = state[k];
         // Si breaks contient des strings, on les affiche tels quels (légende non-choroplèthe)
@@ -50,5 +50,5 @@ function _render() {
             })();
         return `<div class="legend-section-title">${title}</div>${rows}`;
     }).join('');
-    legendEl.classList.remove('hidden');
+    legendEl.classList.remove('legend-hidden');
 }

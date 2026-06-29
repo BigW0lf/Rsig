@@ -129,9 +129,13 @@ function hashToState(hash) {
 }
 
 // ── Persistance localStorage ─────────────────────────────────────────────────
+let _lastSaved = '';
 export function saveState(map) {
     try {
-        localStorage.setItem(LS_KEY, JSON.stringify(snapshotState(map)));
+        const s = JSON.stringify(snapshotState(map));
+        if (s === _lastSaved) return;
+        _lastSaved = s;
+        localStorage.setItem(LS_KEY, s);
     } catch {}
 }
 
