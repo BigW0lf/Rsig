@@ -73,7 +73,14 @@ function showProspectPanel(p) {
         `<option value="${v}"${p.statut === v ? ' selected' : ''}>${l}</option>`
     ).join('');
 
+    const crmBadge = p.crm_account_id
+        ? `<a class="prospect-crm-badge" href="https://rtaxes.crm4.dynamics.com/main.aspx?entityname=account&id=${p.crm_account_id}" target="_blank" rel="noopener">
+               ★ Client RTaxes — ${p.crm_client_name || ''}
+           </a>`
+        : '';
+
     const html =
+        (crmBadge ? `<div class="prospect-crm-row">${crmBadge}</div>` : '') +
         irow('Dénomination',  p.denomination) +
         irow('SIREN',         p.numero_siren) +
         irow('Forme jur.',    p.forme_juridique_abregee) +

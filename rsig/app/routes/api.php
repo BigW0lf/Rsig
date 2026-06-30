@@ -453,11 +453,22 @@ Flight::route('GET /api/prospects', function () {
                 round(((c.coeff_2024 - c.coeff_2017) / NULLIF(c.coeff_2017, 0) * 100)::numeric) AS evol_pct,
                 round(c.area_batiments::numeric) AS surface_bati_m2,
                 array_to_string(ARRAY(SELECT DISTINCT u FROM unnest(c.usages_bat) u), ' | ') AS usages,
-                COALESCE(s.statut, 'nouveau') AS statut,
-                COALESCE(s.note, '') AS note,
+                COALESCE(ps.statut, 'nouveau') AS statut,
+                COALESCE(ps.note, '') AS note,
+                crm.crm_client_name,
+                crm.crm_account_id,
                 ST_AsGeoJSON(ST_Transform(ST_Centroid(c.geom), 4326), 6)::text AS geojson
             FROM coeff_pm_bat_final c
-            LEFT JOIN prospects_statut s ON s.idu = c.idu
+            LEFT JOIN prospects_statut ps ON ps.idu = c.idu
+            LEFT JOIN (
+                SELECT DISTINCT ON (account_siren)
+                    account_siren,
+                    client_name AS crm_client_name,
+                    account_id  AS crm_account_id
+                FROM crm_dossiers
+                WHERE account_siren IS NOT NULL
+                ORDER BY account_siren, date_demande DESC NULLS LAST
+            ) crm ON crm.account_siren = c.numero_siren
             WHERE c.coeff_2017 IS NOT NULL AND c.coeff_2024 IS NOT NULL
               AND c.coeff_2024 > c.coeff_2017
               AND c.area_batiments > 500

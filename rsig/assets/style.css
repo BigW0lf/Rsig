@@ -352,6 +352,26 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
     flex-shrink: 0;
 }
 
+/* ── Prospects — badge client RTaxes ────────────────── */
+.prospect-crm-row {
+    margin-bottom: 8px;
+}
+.prospect-crm-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--green, #16a34a);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 12px;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: opacity .15s;
+}
+.prospect-crm-badge:hover { opacity: .85; }
+
 /* ── Prospects — bloc statut dans le panel ─────────── */
 .prospect-statut-block {
     margin-top: 10px;

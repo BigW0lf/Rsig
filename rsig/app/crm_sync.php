@@ -74,13 +74,14 @@ function crmSync(PDO $db): array {
 
     // ── Cache accounts ────────────────────────────────────────────────────────
     $accountsMap = [];
-    foreach (_fetchAllPages($token, 'https://rtaxes.api.crm4.dynamics.com/api/data/v9.2/accounts?$select=accountid,rtx_code,address1_postalcode,name') as $acc) {
+    foreach (_fetchAllPages($token, 'https://rtaxes.api.crm4.dynamics.com/api/data/v9.2/accounts?$select=accountid,rtx_code,address1_postalcode,name,a_dc9b80f8c78146d89fd6a3b610836975.apo_siren') as $acc) {
         $aid = $acc['accountid'] ?? null;
         if (!$aid) continue;
         $accountsMap[$aid] = [
             'name'     => $acc['name']                ?? null,
             'rtx_code' => $acc['rtx_code']            ?? null,
             'cp'       => $acc['address1_postalcode'] ?? null,
+            'siren'    => $acc['a_dc9b80f8c78146d89fd6a3b610836975.apo_siren'] ?? null,
         ];
     }
 
@@ -125,14 +126,14 @@ function crmSync(PDO $db): array {
     $stmt = $db->prepare("
         INSERT INTO crm_dossiers (
             dossierid, numero, reference_client, client_name,
-            account_id, account_rtx_code, account_cp,
+            account_id, account_rtx_code, account_cp, account_siren,
             auditeur, produit, phase, etat,
             date_demande, date_remise, date_preetudie, modifiedon,
             site_id, adresse, adresse_norm, ville, code_postal, code_insee,
             section, parcelle, lot, montant_tf, type_activite, geom
         ) VALUES (
             :dossierid, :numero, :reference_client, :client_name,
-            :account_id, :account_rtx_code, :account_cp,
+            :account_id, :account_rtx_code, :account_cp, :account_siren,
             :auditeur, :produit, :phase, :etat,
             :date_demande, :date_remise, :date_preetudie, :modifiedon,
             :site_id, :adresse, :adresse_norm, :ville, :code_postal, :code_insee,
@@ -152,6 +153,7 @@ function crmSync(PDO $db): array {
             account_id       = EXCLUDED.account_id,
             account_rtx_code = EXCLUDED.account_rtx_code,
             account_cp       = EXCLUDED.account_cp,
+            account_siren    = EXCLUDED.account_siren,
             auditeur         = EXCLUDED.auditeur,
             produit          = EXCLUDED.produit,
             phase            = EXCLUDED.phase,
@@ -216,6 +218,7 @@ function crmSync(PDO $db): array {
                 ':account_id'       => $accountId,
                 ':account_rtx_code' => $acc['rtx_code'] ?? null,
                 ':account_cp'       => $acc['cp']        ?? null,
+                ':account_siren'    => $acc['siren']     ?? null,
                 ':auditeur'         => _cleanStr($auditeur),
                 ':produit'          => $prodCode  !== '' ? ($produitMap[$prodCode]  ?? null) : null,
                 ':phase'            => $phaseCode !== '' ? ($phaseMap[$phaseCode]   ?? null) : null,
