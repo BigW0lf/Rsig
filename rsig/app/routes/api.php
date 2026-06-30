@@ -434,6 +434,8 @@ Flight::route('GET /api/taux/departements', function () {
 Flight::route('GET /api/prospects', function () {
     if (!isAdmin()) { Flight::json(['error' => 'Accès refusé'], 403); return; }
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $hasTable = (int)$db->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name='coeff_pm_bat_final'")->fetchColumn();
+    if (!$hasTable) { Flight::json(['type' => 'FeatureCollection', 'features' => []]); return; }
     $sql = "SELECT
                 idu, denomination, numero_siren, forme_juridique_abregee,
                 adresse, codecommune AS code_insee,
@@ -461,6 +463,8 @@ Flight::route('GET /api/prospects/occupants', function () {
     $idu = preg_replace('/[^A-Za-z0-9]/', '', Flight::request()->query['idu'] ?? '');
     if (!$idu) { Flight::json([], 400); return; }
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $hasTable = (int)$db->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name='etablisement_siren_geo'")->fetchColumn();
+    if (!$hasTable) { Flight::json([]); return; }
     $sql = "SELECT
                 e.siret, e.siren,
                 COALESCE(e.denominationusuelleetablissement, e.enseigne1etablissement) AS nom,
