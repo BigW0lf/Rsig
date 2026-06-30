@@ -11,7 +11,7 @@ Python : C:/Users/JulesFAGUET/anaconda3/envs/venv/python.exe
 
 import sys, os, re, time, logging, argparse, hashlib, io
 from datetime import datetime
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -62,8 +62,11 @@ KW_RE = [re.compile(kw, re.IGNORECASE | re.DOTALL) for kw in KEYWORDS]
 #
 # Chaque entrée : (domaine, chemin_template, format, notes)
 
-_STD  = "/Publications/Recueil-des-actes-administratifs/RAA-{year}"
+_STD   = "/Publications/Recueil-des-actes-administratifs/RAA-{year}"
 _AMOIS = "/Publications/Recueil-des-actes-administratifs-RAA/Recueil-des-actes-administratifs-{year}/{month}"
+
+# Semestres pour le format S (Alpes-de-Haute-Provence et similaires)
+SEMESTRES = ["de-janvier-a-juillet", "de-aout-a-decembre"]
 
 PREFECTURES = {
     # ── Configurés et vérifiés ─────────────────────────────────────────────
@@ -80,8 +83,19 @@ PREFECTURES = {
     "77": ("https://www.seine-et-marne.gouv.fr",
            "/Publications/Recueils-des-actes-administratifs-RAA/RAA-{year}",
            "B", ""),
-    # ── Chemin standard vérifié ────────────────────────────────────────────
-    "06": ("https://www.alpes-maritimes.gouv.fr",      _STD, "B", ""),
+    # ── Chemins vérifiés ──────────────────────────────────────────────────
+    "03": ("https://www.allier.gouv.fr",
+           "/Publications/Recueil-des-actes-administratifs-arretes/Recueil-des-actes-administratifs-de-l-annee-{year}/Recueil-des-actes-administratifs-de-l-annee-{year}",
+           "B", ""),
+    "04": ("https://www.alpes-de-haute-provence.gouv.fr",
+           "/Publications/Publications-administratives-et-legales/Recueil-des-Actes-Administratifs/{year}-{semestre}",
+           "S", "2 semestres/an"),
+    "05": ("https://www.hautes-alpes.gouv.fr",
+           "/Publications/Recueil-des-actes-administratifs/Annee-{year}",
+           "B", ""),
+    "06": ("https://www.alpes-maritimes.gouv.fr",
+           "/Publications/Recueil-des-actes-administratifs-RAA/Annee-{year}",
+           "B", ""),
     "13": ("https://www.bouches-du-rhone.gouv.fr",     _STD, "B", ""),
     "31": ("https://www.haute-garonne.gouv.fr",        _STD, "B", ""),
     "34": ("https://www.herault.gouv.fr",              _STD, "B", ""),
@@ -100,9 +114,6 @@ PREFECTURES = {
     "94": ("https://www.val-de-marne.gouv.fr",         _STD, "B", ""),
     "95": ("https://www.val-d-oise.gouv.fr",           _STD, "B", ""),
     # ── Chemin standard (à confirmer au premier run) ───────────────────────
-    "03": ("https://www.allier.gouv.fr",               _STD, "B", ""),
-    "04": ("https://www.alpes-de-haute-provence.gouv.fr", _STD, "B", ""),
-    "05": ("https://www.hautes-alpes.gouv.fr",         _STD, "B", ""),
     "07": ("https://www.ardeche.gouv.fr",              _STD, "B", ""),
     "08": ("https://www.ardennes.gouv.fr",             _STD, "B", ""),
     "09": ("https://www.ariege.gouv.fr",               _STD, "B", ""),
@@ -479,6 +490,18 @@ def crawl_format_an(client, dep, domain, path_tpl, year, dry_run, conn):
             time.sleep(DELAY)
     return total
 
+# ── Crawl format S (2 semestres : de-janvier-a-juillet / de-aout-a-decembre) ──
+def crawl_format_s(client, dep, domain, path_tpl, year, dry_run, conn):
+    total = 0
+    for sem in SEMESTRES:
+        url = domain + path_tpl.format(year=year, semestre=sem)
+        log.info(f"[{dep}] semestre {sem}: {url}")
+        # depth=1 pour éviter que crawl_format_b reconstruise l'URL depuis domain+path_tpl
+        total += crawl_format_b(client, dep, domain, url, year, dry_run, conn,
+                                _visited=set(), _depth=1)
+        time.sleep(DELAY)
+    return total
+
 # ── Crawl format A (pages par mois) ──────────────────────────────────────────
 def crawl_format_a(client, dep, domain, path_tpl, year, dry_run, conn):
     total = 0
@@ -495,39 +518,82 @@ def crawl_format_a(client, dep, domain, path_tpl, year, dry_run, conn):
             time.sleep(DELAY)
     return total
 
-# ── Crawl format B (page annuelle avec PDFs directs ou sous-pages) ────────────
-def crawl_format_b(client, dep, domain, path_tpl, year, dry_run, conn):
-    url = domain + path_tpl.format(year=year)
-    log.info(f"[{dep}] page annuelle: {url}")
+# ── Crawl générique récursif (format B) ───────────────────────────────────────
+# Suit les sous-liens internes au domaine jusqu'à MAX_DEPTH niveaux.
+# Dès qu'une page contient des PDFs, elle les traite sans descendre plus loin.
+# Les liens sont filtrés : ils doivent contenir l'année OU "raa" OU "recueil"
+# OU "publication" pour éviter de crawler tout le site.
+
+MAX_DEPTH = 3
+
+def _sublinks(html, base_url, domain, year):
+    """Retourne les liens internes qui sont des sous-chemins de base_url et
+    contiennent un mot-clé RAA/fiscal."""
+    base_path = urlparse(base_url).path.rstrip("/")
+    soup = BeautifulSoup(html, "html.parser")
+    seen = set()
+    result = []
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if href.lower().endswith(".pdf"):
+            continue
+        if not href.startswith("http"):
+            href = urljoin(base_url, href)
+        if domain not in href:
+            continue
+        href = href.split("?")[0].split("#")[0].rstrip("/")
+        if href in seen or href == base_url.rstrip("/"):
+            continue
+        seen.add(href)
+        # N'accepter que les sous-chemins stricts de base_url
+        candidate_path = urlparse(href).path.rstrip("/")
+        if not candidate_path.startswith(base_path + "/"):
+            continue
+        low = href.lower()
+        if any(x in low for x in [str(year), "raa", "recueil", "actes-administratifs",
+                                   "janvier","fevrier","mars","avril","mai","juin",
+                                   "juillet","aout","septembre","octobre","novembre","decembre"]):
+            result.append(href)
+    return result
+
+def crawl_format_b(client, dep, domain, path_tpl, year, dry_run, conn,
+                   _visited=None, _depth=0):
+    url = domain + path_tpl.format(year=year) if _depth == 0 else path_tpl
+    if _visited is None:
+        _visited = set()
+        log.info(f"[{dep}] crawl récursif: {url}")
+
+    if url in _visited:
+        return 0
+    _visited.add(url)
+
     html = fetch_html(client, url)
     if not html:
-        log.warning(f"[{dep}] page inaccessible: {url}")
+        if _depth == 0:
+            log.warning(f"[{dep}] page inaccessible: {url}")
         return 0
 
+    # Si des PDFs sont présents sur cette page → les traiter, ne pas descendre
     pdfs = find_pdf_links(html, url)
     if pdfs:
-        log.info(f"  {len(pdfs)} PDFs directs")
+        log.info(f"[{dep}] {'  ' * _depth}{len(pdfs)} PDFs sur {url.split(domain)[-1]}")
         total = 0
         for titre, pdf_url in pdfs:
             total += process_pdf(client, dep, year, titre, pdf_url, dry_run, conn)
             time.sleep(DELAY)
         return total
 
-    # Pas de PDFs directs — chercher des sous-pages avec PDFs
-    soup = BeautifulSoup(html, "html.parser")
-    subpages = []
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if not href.startswith("http"):
-            href = urljoin(url, href)
-        if domain in href and href != url and (str(year) in href or "raa" in href.lower()):
-            subpages.append(href)
-    subpages = list(dict.fromkeys(subpages))
-    log.info(f"  {len(subpages)} sous-pages potentielles")
+    # Pas de PDFs → suivre les sous-liens internes si profondeur max non atteinte
+    if _depth >= MAX_DEPTH:
+        return 0
+
+    sublinks = _sublinks(html, url, domain, year)
+    log.info(f"[{dep}] {'  ' * _depth}{len(sublinks)} sous-liens depuis {url.split(domain)[-1]}")
 
     total = 0
-    for sp_url in subpages:
-        total += process_page_with_pdfs(client, dep, year, sp_url, dry_run, conn)
+    for sub in sublinks:
+        total += crawl_format_b(client, dep, domain, sub, year, dry_run, conn,
+                                _visited=_visited, _depth=_depth + 1)
         time.sleep(DELAY)
     return total
 
@@ -604,6 +670,8 @@ def main():
         try:
             if fmt == "AN":
                 n = crawl_format_an(client, dep, domain, path_tpl, args.year, args.dry_run, conn)
+            elif fmt == "S":
+                n = crawl_format_s(client, dep, domain, path_tpl, args.year, args.dry_run, conn)
             elif fmt == "A":
                 n = crawl_format_a(client, dep, domain, path_tpl, args.year, args.dry_run, conn)
             elif fmt == "B":
