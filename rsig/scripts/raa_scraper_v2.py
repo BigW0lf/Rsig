@@ -62,10 +62,12 @@ KW_RE = [re.compile(kw, re.IGNORECASE | re.DOTALL) for kw in KEYWORDS]
 #
 # Chaque entrée : (domaine, chemin_template, format, notes)
 
-_STD = "/Publications/Recueil-des-actes-administratifs/RAA-{year}"
+_STD  = "/Publications/Recueil-des-actes-administratifs/RAA-{year}"
+_AMOIS = "/Publications/Recueil-des-actes-administratifs-RAA/Recueil-des-actes-administratifs-{year}/{month}"
 
 PREFECTURES = {
     # ── Configurés et vérifiés ─────────────────────────────────────────────
+    "01": ("https://www.ain.gouv.fr",          _AMOIS, "AN", "mois 01-JANVIER…"),
     "02": ("https://www.aisne.gouv.fr",
            "/Publications/Recueil-des-Actes-Administratifs/RAA-Annee-{year}",
            "D", "offset pagination"),
@@ -98,7 +100,6 @@ PREFECTURES = {
     "94": ("https://www.val-de-marne.gouv.fr",         _STD, "B", ""),
     "95": ("https://www.val-d-oise.gouv.fr",           _STD, "B", ""),
     # ── Chemin standard (à confirmer au premier run) ───────────────────────
-    "01": ("https://www.ain.gouv.fr",                  _STD, "B", ""),
     "03": ("https://www.allier.gouv.fr",               _STD, "B", ""),
     "04": ("https://www.alpes-de-haute-provence.gouv.fr", _STD, "B", ""),
     "05": ("https://www.hautes-alpes.gouv.fr",         _STD, "B", ""),
@@ -181,6 +182,9 @@ PREFECTURES = {
 
 MONTHS_FR = ["Janvier","Fevrier","Mars","Avril","Mai","Juin",
              "Juillet","Aout","Septembre","Octobre","Novembre","Decembre"]
+
+# Format AN : mois sous forme "01-JANVIER", "02-FEVRIER"... (ex: Ain)
+MONTHS_AN = [f"{i+1:02d}-{m.upper()}" for i, m in enumerate(MONTHS_FR)]
 
 # Charger les préfectures découvertes dynamiquement (sortie de raa_discover.py)
 import json as _json
@@ -459,6 +463,22 @@ def process_page_with_pdfs(client, dep, year, page_url, dry_run, conn):
         time.sleep(DELAY)
     return count
 
+# ── Crawl format AN (pages par mois numérotés : 01-JANVIER…) ─────────────────
+def crawl_format_an(client, dep, domain, path_tpl, year, dry_run, conn):
+    total = 0
+    for month in MONTHS_AN:
+        url = domain + path_tpl.format(year=year, month=month)
+        log.info(f"[{dep}] mois {month}: {url}")
+        html = fetch_html(client, url)
+        if not html:
+            continue
+        pdfs = find_pdf_links(html, url)
+        log.info(f"  {len(pdfs)} PDFs")
+        for titre, pdf_url in pdfs:
+            total += process_pdf(client, dep, year, titre, pdf_url, dry_run, conn)
+            time.sleep(DELAY)
+    return total
+
 # ── Crawl format A (pages par mois) ──────────────────────────────────────────
 def crawl_format_a(client, dep, domain, path_tpl, year, dry_run, conn):
     total = 0
@@ -582,7 +602,9 @@ def main():
         domain, path_tpl, fmt, notes = PREFECTURES[dep]
         log.info(f"\n{'='*60}\nDep {dep} | {domain} | format {fmt}\n{'='*60}")
         try:
-            if fmt == "A":
+            if fmt == "AN":
+                n = crawl_format_an(client, dep, domain, path_tpl, args.year, args.dry_run, conn)
+            elif fmt == "A":
                 n = crawl_format_a(client, dep, domain, path_tpl, args.year, args.dry_run, conn)
             elif fmt == "B":
                 n = crawl_format_b(client, dep, domain, path_tpl, args.year, args.dry_run, conn)
