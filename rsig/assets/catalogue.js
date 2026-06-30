@@ -66,7 +66,7 @@ const CATALOGUE = [
     {
         group: 'Commercial',
         layers: [
-            { id: 'prospects',  mapPrefix: 'prospects',  label: 'Prospects coeff loc.', optionsId: null, desc: 'Sociétés privées sur parcelles à coeff en hausse 2017→2024, bâti >500 m², hors industrie' },
+            { id: 'prospects',  mapPrefix: 'prospects',  label: 'Prospects coeff loc.', optionsId: 'prospects-options', desc: 'Sociétés privées sur parcelles à coeff en hausse 2017→2024, bâti >500 m², hors industrie' },
         ],
     },
     {

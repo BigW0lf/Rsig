@@ -5,6 +5,7 @@ import { showInfo, clearInfo, irow } from '../panel.js';
 
 let active = false;
 let loaded = false;
+let _allFeatures = [];   // cache complet des features (pour filtrage surface)
 
 const COLOR_HIGH  = '#dc2626'; // évol >= 20%
 const COLOR_MED   = '#f97316'; // évol 10-20%
@@ -23,9 +24,36 @@ function remove(map) {
     if (map.getSource('prospects-src')) map.removeSource('prospects-src');
 }
 
+function _getSurfaceMin() {
+    const sl = document.getElementById('prospects-surface');
+    return sl ? +sl.value : 500;
+}
+
+function _applyFilter() {
+    const src = map_ref?.getSource('prospects-src');
+    if (!src || !_allFeatures.length) return;
+    const min = _getSurfaceMin();
+    const filtered = _allFeatures.filter(f => (f.properties.surface_bati_m2 ?? 0) >= min);
+    src.setData({ type: 'FeatureCollection', features: filtered });
+}
+
+let map_ref = null;
+
 export function initProspects(map) {
+    map_ref = map;
     const toggle = document.getElementById('toggle-prospects');
     if (!toggle) return;
+
+    // Slider surface
+    const slider  = document.getElementById('prospects-surface');
+    const valSpan = document.getElementById('prospects-surface-val');
+    if (slider) {
+        slider.addEventListener('input', () => {
+            const v = +slider.value;
+            if (valSpan) valSpan.textContent = v.toLocaleString('fr-FR') + ' m²';
+            _applyFilter();
+        });
+    }
 
     // ── Handlers enregistrés une seule fois ──────────────────────────────
     map.on('mouseenter', 'prospects-circle',  () => map.getCanvas().style.cursor = 'pointer');
@@ -105,6 +133,7 @@ export function initProspects(map) {
         if (!active) {
             remove(map);
             loaded = false;
+            _allFeatures = [];
             dropLegend('prospects');
             clearInfo('prospects');
             return;
@@ -117,8 +146,15 @@ export function initProspects(map) {
                 hideSpinner();
                 if (!active || !fc?.features?.length) return;
 
+                _allFeatures = fc.features;
+                const minSurf = _getSurfaceMin();
+                const initialData = {
+                    type: 'FeatureCollection',
+                    features: _allFeatures.filter(f => (f.properties.surface_bati_m2 ?? 0) >= minSurf),
+                };
+
                 map.addSource('prospects-src', {
-                    type: 'geojson', data: fc,
+                    type: 'geojson', data: initialData,
                     cluster: true, clusterRadius: 40, clusterMaxZoom: 13,
                 });
 
