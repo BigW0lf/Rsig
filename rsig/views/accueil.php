@@ -511,6 +511,9 @@ kbd {
                     <input type="range" id="prospects-surface" min="500" max="5000" step="100" value="500">
                 </label>
                 <div class="layer-hint" style="margin-bottom:6px">Filtre les parcelles dont le bâti est ≥ seuil</div>
+                <div class="prospect-crm-filter-row">
+                    <button id="prospects-rtaxes-only" class="prospect-rtaxes-btn" data-active="0">★ Clients RTaxes uniquement</button>
+                </div>
                 <div class="prospect-filter-title">Afficher les états</div>
                 <div class="prospect-filter-statuts">
                     <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="nouveau" checked><span class="prospect-filter-dot" style="background:#dc2626"></span>Nouveau</label>

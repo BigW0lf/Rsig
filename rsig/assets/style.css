@@ -372,6 +372,31 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
 }
 .prospect-crm-badge:hover { opacity: .85; }
 
+/* ── Prospects — bouton filtre RTaxes ───────────────── */
+.prospect-crm-filter-row {
+    margin: 4px 0 8px;
+}
+.prospect-rtaxes-btn {
+    width: 100%;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 6px;
+    border: 1.5px solid var(--green, #16a34a);
+    background: transparent;
+    color: var(--green, #16a34a);
+    cursor: pointer;
+    transition: background .15s, color .15s;
+}
+.prospect-rtaxes-btn[data-active="1"] {
+    background: var(--green, #16a34a);
+    color: #fff;
+}
+.prospect-rtaxes-btn:hover {
+    background: var(--green, #16a34a);
+    color: #fff;
+}
+
 /* ── Prospects — bloc statut dans le panel ─────────── */
 .prospect-statut-block {
     margin-top: 10px;

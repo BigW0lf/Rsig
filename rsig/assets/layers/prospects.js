@@ -28,8 +28,9 @@ const COLOR_HIGH = '#dc2626';
 const COLOR_MED  = '#f97316';
 const COLOR_LOW  = '#eab308';
 
-// ── Filtre statuts actifs (options couche) ─────────────────────────────────
-let _activeStatuts = new Set(['nouveau','contacte','en_attente','annule','client']);
+// ── Filtres actifs ─────────────────────────────────────────────────────────
+let _activeStatuts  = new Set(['nouveau','contacte','en_attente','annule','client']);
+let _rtaxesOnly     = false;
 
 function _getSurfaceMin() {
     const sl = document.getElementById('prospects-surface');
@@ -40,10 +41,12 @@ function _applyFilter() {
     const src = map_ref?.getSource('prospects-src');
     if (!src || !_allFeatures.length) return;
     const minSurf = _getSurfaceMin();
-    const filtered = _allFeatures.filter(f =>
-        (f.properties.surface_bati_m2 ?? 0) >= minSurf &&
-        _activeStatuts.has(f.properties.statut ?? 'nouveau')
-    );
+    const filtered = _allFeatures.filter(f => {
+        if ((f.properties.surface_bati_m2 ?? 0) < minSurf) return false;
+        if (!_activeStatuts.has(f.properties.statut ?? 'nouveau')) return false;
+        if (_rtaxesOnly && !f.properties.crm_account_id) return false;
+        return true;
+    });
     src.setData({ type: 'FeatureCollection', features: filtered });
 }
 
@@ -196,6 +199,16 @@ export function initProspects(map) {
         });
     }
 
+    // Bouton "Clients RTaxes uniquement"
+    const rtaxesBtn = document.getElementById('prospects-rtaxes-only');
+    if (rtaxesBtn) {
+        rtaxesBtn.addEventListener('click', () => {
+            _rtaxesOnly = !_rtaxesOnly;
+            rtaxesBtn.dataset.active = _rtaxesOnly ? '1' : '0';
+            _applyFilter();
+        });
+    }
+
     // Checkboxes statut dans les options
     document.querySelectorAll('.prospect-statut-filter').forEach(cb => {
         cb.addEventListener('change', () => {
@@ -235,6 +248,9 @@ export function initProspects(map) {
             remove(map);
             loaded = false;
             _allFeatures = [];
+            _rtaxesOnly  = false;
+            const btn = document.getElementById('prospects-rtaxes-only');
+            if (btn) btn.dataset.active = '0';
             dropLegend('prospects');
             clearInfo('prospects');
             return;
