@@ -436,26 +436,62 @@ Flight::route('GET /api/prospects', function () {
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $hasTable = (int)$db->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name='coeff_pm_bat_final'")->fetchColumn();
     if (!$hasTable) { Flight::json(['type' => 'FeatureCollection', 'features' => []]); return; }
+    // Créer la table statuts si elle n'existe pas encore
+    $db->exec("CREATE TABLE IF NOT EXISTS prospects_statut (
+        idu varchar(20) PRIMARY KEY,
+        statut varchar(20) NOT NULL DEFAULT 'nouveau'
+            CHECK (statut IN ('nouveau','contacte','en_attente','annule','client')),
+        note text,
+        updated_at timestamp DEFAULT now()
+    )");
     $sql = "SELECT
-                idu, denomination, numero_siren, forme_juridique_abregee,
-                adresse, codecommune AS code_insee,
-                section, parcelle,
-                round(coeff_2017::numeric, 3) AS coeff_2017,
-                round(coeff_2024::numeric, 3) AS coeff_2024,
-                round(((coeff_2024 - coeff_2017) / NULLIF(coeff_2017, 0) * 100)::numeric) AS evol_pct,
-                round(area_batiments::numeric) AS surface_bati_m2,
-                array_to_string(ARRAY(SELECT DISTINCT u FROM unnest(usages_bat) u), ' | ') AS usages,
-                ST_AsGeoJSON(ST_Transform(ST_Centroid(geom), 4326), 6)::text AS geojson
-            FROM coeff_pm_bat_final
-            WHERE coeff_2017 IS NOT NULL AND coeff_2024 IS NOT NULL
-              AND coeff_2024 > coeff_2017
-              AND area_batiments > 500
-              AND nature_culture = 'S'
-              AND code_forme_juridique NOT IN (7210,7220,7113,7313,7346,7229,7344,4140,4110,7389,7348,7490,9900)
-              AND NOT ('Industriel' = ANY(usages_bat))
-            ORDER BY ((coeff_2024 - coeff_2017) / NULLIF(coeff_2017, 0)) DESC";
+                c.idu, c.denomination, c.numero_siren, c.forme_juridique_abregee,
+                c.adresse, c.codecommune AS code_insee,
+                c.section, c.parcelle,
+                round(c.coeff_2017::numeric, 3) AS coeff_2017,
+                round(c.coeff_2024::numeric, 3) AS coeff_2024,
+                round(((c.coeff_2024 - c.coeff_2017) / NULLIF(c.coeff_2017, 0) * 100)::numeric) AS evol_pct,
+                round(c.area_batiments::numeric) AS surface_bati_m2,
+                array_to_string(ARRAY(SELECT DISTINCT u FROM unnest(c.usages_bat) u), ' | ') AS usages,
+                COALESCE(s.statut, 'nouveau') AS statut,
+                COALESCE(s.note, '') AS note,
+                ST_AsGeoJSON(ST_Transform(ST_Centroid(c.geom), 4326), 6)::text AS geojson
+            FROM coeff_pm_bat_final c
+            LEFT JOIN prospects_statut s ON s.idu = c.idu
+            WHERE c.coeff_2017 IS NOT NULL AND c.coeff_2024 IS NOT NULL
+              AND c.coeff_2024 > c.coeff_2017
+              AND c.area_batiments > 500
+              AND c.nature_culture = 'S'
+              AND c.code_forme_juridique NOT IN (7210,7220,7113,7313,7346,7229,7344,4140,4110,7389,7348,7490,9900)
+              AND NOT ('Industriel' = ANY(c.usages_bat))
+            ORDER BY ((c.coeff_2024 - c.coeff_2017) / NULLIF(c.coeff_2017, 0)) DESC";
     $stmt = $db->query($sql);
     Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
+});
+
+Flight::route('POST /api/prospects/statut', function () {
+    if (!isAdmin()) { Flight::json(['error' => 'Accès refusé'], 403); return; }
+    $body   = json_decode(file_get_contents('php://input'), true);
+    $idu    = preg_replace('/[^A-Za-z0-9]/', '', $body['idu']    ?? '');
+    $statut = $body['statut'] ?? '';
+    $note   = substr(trim($body['note'] ?? ''), 0, 500);
+    $allowed = ['nouveau','contacte','en_attente','annule','client'];
+    if (!$idu || !in_array($statut, $allowed, true)) {
+        Flight::json(['error' => 'Paramètres invalides'], 400); return;
+    }
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $db->exec("CREATE TABLE IF NOT EXISTS prospects_statut (
+        idu varchar(20) PRIMARY KEY,
+        statut varchar(20) NOT NULL DEFAULT 'nouveau'
+            CHECK (statut IN ('nouveau','contacte','en_attente','annule','client')),
+        note text,
+        updated_at timestamp DEFAULT now()
+    )");
+    $stmt = $db->prepare("INSERT INTO prospects_statut (idu, statut, note, updated_at)
+        VALUES (:idu, :statut, :note, now())
+        ON CONFLICT (idu) DO UPDATE SET statut=EXCLUDED.statut, note=EXCLUDED.note, updated_at=now()");
+    $stmt->execute([':idu' => $idu, ':statut' => $statut, ':note' => $note]);
+    Flight::json(['ok' => true]);
 });
 
 Flight::route('GET /api/prospects/occupants', function () {

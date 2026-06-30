@@ -510,7 +510,15 @@ kbd {
                     Surface bâtie min. <span id="prospects-surface-val">500 m²</span>
                     <input type="range" id="prospects-surface" min="500" max="5000" step="100" value="500">
                 </label>
-                <div class="layer-hint">Filtre les parcelles dont le bâti est ≥ seuil</div>
+                <div class="layer-hint" style="margin-bottom:6px">Filtre les parcelles dont le bâti est ≥ seuil</div>
+                <div class="prospect-filter-title">Afficher les états</div>
+                <div class="prospect-filter-statuts">
+                    <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="nouveau" checked><span class="prospect-filter-dot" style="background:#dc2626"></span>Nouveau</label>
+                    <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="contacte" checked><span class="prospect-filter-dot" style="background:#3b82f6"></span>Contacté</label>
+                    <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="en_attente" checked><span class="prospect-filter-dot" style="background:#8b5cf6"></span>En attente</label>
+                    <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="annule" checked><span class="prospect-filter-dot" style="background:#94a3b8"></span>Annulé</label>
+                    <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="client" checked><span class="prospect-filter-dot" style="background:#16a34a"></span>Client</label>
+                </div>
             </div>
         </div>
 
