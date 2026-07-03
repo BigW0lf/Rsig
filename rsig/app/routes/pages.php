@@ -92,6 +92,27 @@ Flight::route('GET /requetes', function () { requireAuth(); trackVisit('requetes
 Flight::route('GET /bofip',    function () { requireAuth(); trackVisit('bofip'); Flight::render('bofip'); });
 // ── Mise à jour — admin uniquement ───────────────────────
 Flight::route('GET /maj',      function () { requireAdmin(); trackVisit('maj'); Flight::render('maj'); });
+// ── Fiche client CRM ─────────────────────────────────────
+Flight::route('GET /client/@account_id', function ($account_id) {
+    requireAuth();
+    $db = getDb();
+    if (!$db) { http_response_code(503); echo 'Base non disponible'; return; }
+    $stmt = $db->prepare("SELECT * FROM crm_accounts WHERE account_id = :id");
+    $stmt->execute([':id' => $account_id]);
+    $account = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$account) { http_response_code(404); echo 'Client introuvable'; return; }
+    $stmt2 = $db->prepare("
+        SELECT numero, produit, phase, etat, date_demande, date_remise,
+               ville, code_postal, code_insee, montant_tf, adresse, auditeur
+        FROM crm_dossiers
+        WHERE account_id = :id
+        ORDER BY date_demande DESC NULLS LAST
+    ");
+    $stmt2->execute([':id' => $account_id]);
+    $dossiers = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+    Flight::render('client_crm', ['account' => $account, 'dossiers' => $dossiers]);
+});
+
 // ── Stats admin ───────────────────────────────────────────
 Flight::route('GET /admin/stats', function () {
     requireAdmin();

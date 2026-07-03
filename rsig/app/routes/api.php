@@ -148,6 +148,35 @@ Flight::route('GET /api/crm/geojson', function () {
     Flight::json(['type'=>'FeatureCollection','features'=>$features]);
 });
 
+// ── Fiche client CRM (depuis crm_dossiers) ───────────────────────────────────
+Flight::route('GET /api/crm/account/@account_id', function ($account_id) {
+    if (!isAdmin()) { Flight::json(['error' => 'Accès refusé'], 403); return; }
+    $db = getDb();
+    if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+
+    $stmt = $db->prepare("
+        SELECT account_id, client_name, account_rtx_code, account_cp, account_siren
+        FROM crm_dossiers
+        WHERE account_id = :id
+        LIMIT 1
+    ");
+    $stmt->execute([':id' => $account_id]);
+    $account = $stmt->fetch();
+    if (!$account) { Flight::json(['error' => 'Compte introuvable'], 404); return; }
+
+    $stmt2 = $db->prepare("
+        SELECT numero, produit, phase, etat, date_demande, date_remise,
+               ville, code_postal, code_insee, montant_tf
+        FROM crm_dossiers
+        WHERE account_id = :id
+        ORDER BY date_demande DESC NULLS LAST
+    ");
+    $stmt2->execute([':id' => $account_id]);
+    $dossiers = $stmt2->fetchAll();
+
+    Flight::json(['account' => $account, 'dossiers' => $dossiers]);
+});
+
 // ── Requêtes SELECT (lecture seule) ───────────────────────
 Flight::route('POST /api/query', function () {
     $body = json_decode(file_get_contents('php://input'), true);

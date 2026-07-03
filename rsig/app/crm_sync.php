@@ -72,16 +72,79 @@ function crmSync(PDO $db): array {
         foreach ($rows as $r) $existingCoords[$r['site_id']] = [(float)$r['lon'], (float)$r['lat']];
     } catch (\Throwable) {}
 
-    // ── Cache accounts ────────────────────────────────────────────────────────
+    // ── Table crm_accounts (DDL hors transaction) ────────────────────────────
+    $db->exec("CREATE TABLE IF NOT EXISTS crm_accounts (
+        account_id   TEXT PRIMARY KEY,
+        name         TEXT,
+        rtx_code     TEXT,
+        siren        TEXT,
+        email1       TEXT,
+        email2       TEXT,
+        telephone    TEXT,
+        adresse      TEXT,
+        code_postal  TEXT,
+        ville        TEXT,
+        pays         TEXT,
+        rcs          TEXT,
+        description  TEXT,
+        retrocession NUMERIC,
+        synced_at    TIMESTAMPTZ DEFAULT now()
+    )");
+
+    // ── Cache accounts + UPSERT crm_accounts ─────────────────────────────────
     $accountsMap = [];
-    foreach (_fetchAllPages($token, 'https://rtaxes.api.crm4.dynamics.com/api/data/v9.2/accounts?$select=accountid,rtx_code,address1_postalcode,name,a_dc9b80f8c78146d89fd6a3b610836975.apo_siren') as $acc) {
+    $accStmt = $db->prepare("
+        INSERT INTO crm_accounts
+            (account_id, name, rtx_code, siren, email1, email2, telephone,
+             adresse, code_postal, ville, pays, rcs, description, retrocession, synced_at)
+        VALUES
+            (:account_id, :name, :rtx_code, :siren, :email1, :email2, :telephone,
+             :adresse, :code_postal, :ville, :pays, :rcs, :description, :retrocession, now())
+        ON CONFLICT (account_id) DO UPDATE SET
+            name         = EXCLUDED.name,
+            rtx_code     = EXCLUDED.rtx_code,
+            siren        = EXCLUDED.siren,
+            email1       = EXCLUDED.email1,
+            email2       = EXCLUDED.email2,
+            telephone    = EXCLUDED.telephone,
+            adresse      = EXCLUDED.adresse,
+            code_postal  = EXCLUDED.code_postal,
+            ville        = EXCLUDED.ville,
+            pays         = EXCLUDED.pays,
+            rcs          = EXCLUDED.rcs,
+            description  = EXCLUDED.description,
+            retrocession = EXCLUDED.retrocession,
+            synced_at    = now()
+    ");
+    $accFields = 'accountid,name,rtx_code,apo_siren,emailaddress1,emailaddress2,telephone1,address1_telephone1,address1_line1,address1_postalcode,address1_city,address1_country,apo_rcs,description,rtx_accordderemuneration';
+    foreach (_fetchAllPages($token, "https://rtaxes.api.crm4.dynamics.com/api/data/v9.2/accounts?\$select={$accFields}") as $acc) {
         $aid = $acc['accountid'] ?? null;
         if (!$aid) continue;
+        $rawSiren = $acc['apo_siren'] ?? null;
+        $siren    = $rawSiren !== null ? preg_replace('/\s+/', '', $rawSiren) : null;
+        $tel      = $acc['address1_telephone1'] ?? $acc['telephone1'] ?? null;
+        $adresse  = $acc['address1_line1'] ?? null;
+        $accStmt->execute([
+            ':account_id'  => $aid,
+            ':name'        => _cleanStr($acc['name'] ?? null),
+            ':rtx_code'    => $acc['rtx_code'] ?? null,
+            ':siren'       => $siren,
+            ':email1'      => $acc['emailaddress1'] ?? null,
+            ':email2'      => $acc['emailaddress2'] ?? null,
+            ':telephone'   => $tel,
+            ':adresse'     => _cleanStr($adresse),
+            ':code_postal' => $acc['address1_postalcode'] ?? null,
+            ':ville'       => _cleanStr($acc['address1_city'] ?? null),
+            ':pays'        => _cleanStr($acc['address1_country'] ?? null),
+            ':rcs'         => _cleanStr($acc['apo_rcs'] ?? null),
+            ':description' => _cleanStr($acc['description'] ?? null),
+            ':retrocession'=> isset($acc['rtx_accordderemuneration']) ? (float)$acc['rtx_accordderemuneration'] : null,
+        ]);
         $accountsMap[$aid] = [
-            'name'     => $acc['name']                ?? null,
-            'rtx_code' => $acc['rtx_code']            ?? null,
+            'name'     => _cleanStr($acc['name'] ?? null),
+            'rtx_code' => $acc['rtx_code'] ?? null,
             'cp'       => $acc['address1_postalcode'] ?? null,
-            'siren'    => $acc['a_dc9b80f8c78146d89fd6a3b610836975.apo_siren'] ?? null,
+            'siren'    => $siren,
         ];
     }
 

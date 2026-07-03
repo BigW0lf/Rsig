@@ -77,7 +77,7 @@ function showProspectPanel(p) {
     ).join('');
 
     const crmBadge = p.crm_account_id
-        ? `<a class="prospect-crm-badge" href="https://rtaxes.crm4.dynamics.com/main.aspx?entityname=account&id=${p.crm_account_id}" target="_blank" rel="noopener">
+        ? `<a class="prospect-crm-badge" href="/client/${encodeURIComponent(p.crm_account_id)}" target="_blank" rel="noopener">
                ★ Client RTaxes — ${p.crm_client_name || ''}
            </a>`
         : '';
