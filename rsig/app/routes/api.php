@@ -64,12 +64,14 @@ Flight::route('GET /api/crm/sync/status', function () {
     $db = getDb();
     if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $row = $db->query("SELECT * FROM crm_sync_log ORDER BY id DESC LIMIT 1")->fetch();
-    $counts = $db->query("SELECT COUNT(*) AS s FROM crm_sites_mirror")->fetchColumn();
-    $countd = $db->query("SELECT COUNT(*) AS d FROM crm_dossiers_mirror")->fetchColumn();
+    $counts = $db->query("SELECT COUNT(*) FROM crm_sites_mirror")->fetchColumn();
+    $countd = $db->query("SELECT COUNT(*) FROM crm_dossiers")->fetchColumn();
+    $counta = $db->query("SELECT COUNT(*) FROM crm_accounts")->fetchColumn();
     Flight::json([
-        'last_sync' => $row ?: null,
+        'last_sync'      => $row ?: null,
         'sites_in_db'    => (int)$counts,
         'dossiers_in_db' => (int)$countd,
+        'accounts_in_db' => (int)$counta,
     ]);
 });
 
