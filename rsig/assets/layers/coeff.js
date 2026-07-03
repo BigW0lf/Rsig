@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop, apiFetch } from '../utils.js';
+import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop, apiFetch, debounce } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 import { isHidden } from '../catalogue.js';
@@ -302,21 +302,21 @@ export function initCoeff(map) {
     const seuilEl  = document.getElementById('coeff-seuil');
     const seuilVal = document.getElementById('coeff-seuil-val');
     if (seuilEl) {
+        const applySeuilDebounced = debounce(() => {
+            if (!active || !polyCache) return;
+            const champ = champEl.value;
+            if (champ === 'evolution') return;
+            const pal = PAL.coeff;
+            const filtered = applySeuilFilter(polyCache, champ);
+            filtered.features.forEach(f => { f.properties[champ] = getVal(f.properties, champ); });
+            const breaks = globalBreaks[champ] ?? computeBreaks(filtered.features.map(f => f.properties[champ]).filter(v => v != null && isFinite(v)), 6);
+            upsertPoly(map, filtered, pal[pal.length - 1], breaks, pal, champ);
+            saveLegend('coeff', champEl.options[champEl.selectedIndex].text, breaks, pal, '');
+        }, 120);
         seuilEl.addEventListener('input', () => {
             _seuil = parseFloat(seuilEl.value);
             seuilVal.textContent = _seuil.toFixed(2).replace('.', ',');
-            if (active && polyCache) {
-                const champ = champEl.value;
-                const isEvol = champ === 'evolution';
-                if (!isEvol) {
-                    const pal = PAL.coeff;
-                    const filtered = applySeuilFilter(polyCache, champ);
-                    filtered.features.forEach(f => { f.properties[champ] = getVal(f.properties, champ); });
-                    const breaks = globalBreaks[champ] ?? computeBreaks(filtered.features.map(f => f.properties[champ]).filter(v => v != null && isFinite(v)), 6);
-                    upsertPoly(map, filtered, pal[pal.length - 1], breaks, pal, champ);
-                    saveLegend('coeff', champEl.options[champEl.selectedIndex].text, breaks, pal, '');
-                }
-            }
+            applySeuilDebounced();
         });
     }
 

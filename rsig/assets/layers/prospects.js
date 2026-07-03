@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, bddOnTop, apiFetch } from '../utils.js';
+import { showSpinner, hideSpinner, bddOnTop, apiFetch, debounce } from '../utils.js';
 import { isMeasuring } from '../measure.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
@@ -192,10 +192,11 @@ export function initProspects(map) {
     const slider  = document.getElementById('prospects-surface');
     const valSpan = document.getElementById('prospects-surface-val');
     if (slider) {
+        const applyFilterDebounced = debounce(_applyFilter, 120);
         slider.addEventListener('input', () => {
             const v = +slider.value;
             if (valSpan) valSpan.textContent = v.toLocaleString('fr-FR') + ' m²';
-            _applyFilter();
+            applyFilterDebounced();
         });
     }
 

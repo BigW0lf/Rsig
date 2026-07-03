@@ -43,10 +43,15 @@ export async function apiFetch(url, opts = {}) {
     }
 }
 
-// ── Debounce ──────────────────────────────────────────────
-export function debounce(fn, delay) {
+// ── Debounce — trailing + leading edge optionnel ──────────
+export function debounce(fn, delay, { leading = false } = {}) {
     let t;
-    return function (...args) { clearTimeout(t); t = setTimeout(() => fn.apply(this, args), delay); };
+    return function (...args) {
+        const callNow = leading && !t;
+        clearTimeout(t);
+        t = setTimeout(() => { t = null; if (!leading) fn.apply(this, args); }, delay);
+        if (callNow) fn.apply(this, args);
+    };
 }
 
 // ── Choroplèthe ───────────────────────────────────────────
@@ -86,9 +91,34 @@ export const PAL = {
     tf:      ['#ffffcc', '#c7e9b4', '#7fcdbb', '#41b6c4', '#1d91c0', '#225ea8'],
 };
 
-// ── Ordre des couches — RAF-debounced (1 seul passage/frame) ─
+// ── Ordre des couches — RAF-debounced, 1 seul passage/frame ─
+// On ne moveLayer que les couches dont l'ordre a changé depuis
+// la dernière fois, évitant des repaints GL en cascade.
 let _bddPending = false;
 let _bddMap = null;
+
+const _BDD_ORDER = [
+    // 1. Remplissages/contours de fond (sous tout)
+    'taux-fill','taux-line','tarifs-fill','tarifs-line','sections-fill',
+    'cfe-fill','cfe-line','tf-fill','tf-line',
+    'ta-fill','ta-line',
+    'tsb-idf-fill','tsb-idf-line','tsb-paca-fill','tsb-paca-line',
+    'tass-fill','tass-line','zfu-fill','zfu-line',
+    // 2. Hachures + polygones coeff
+    ...[...Array(10)].map((_, i) => `coeff-hatch-${i}`),
+    'coeff-fill','coeff-line',
+    'coeff-cluster-circle','coeff-cluster-cluster','coeff-cluster-count',
+    // 3. TA majorée
+    'ta-maj-fill','ta-maj-line',
+    ...[...Array(5)].map((_, i) => `ta-maj-hatch-${i}`),
+    'ta-maj-cluster','ta-maj-cluster-count','ta-maj-point',
+    // 4. POI OSM
+    'osm-point',
+    // 5. Prospects
+    'prospects-circle','prospects-cluster','prospects-cluster-count',
+    // 6. Dossiers — tout en haut
+    'dossiers-circle','dossiers-cluster','dossiers-cluster-count',
+];
 
 export function bddOnTop(map) {
     _bddMap = map;
@@ -98,41 +128,20 @@ export function bddOnTop(map) {
         _bddPending = false;
         const m = _bddMap;
         if (!m) return;
-        // 1. Couches de base (remplissage + contour)
-        ['taux-fill','taux-line','tarifs-fill','tarifs-line','sections-fill',
-         'cfe-fill','cfe-line','tf-fill','tf-line',
-         'ta-fill','ta-line',
-         'tsb-idf-fill','tsb-idf-line','tsb-paca-fill','tsb-paca-line',
-         'tass-fill','tass-line','zfu-fill','zfu-line',
-        ].forEach(id => { if (m.getLayer(id)) m.moveLayer(id); });
-        // 2. Hachures coeff
-        for (let i = 0; i < 10; i++) {
-            if (m.getLayer(`coeff-hatch-${i}`)) m.moveLayer(`coeff-hatch-${i}`);
+        // Récupère l'ordre actuel des layers présents dans notre liste
+        const existing = _BDD_ORDER.filter(id => m.getLayer(id));
+        if (!existing.length) return;
+        // Ne faire des moveLayer que si l'ordre diffère de ce qu'on veut
+        const allLayers = m.getStyle()?.layers?.map(l => l.id) ?? [];
+        let lastIdx = -1;
+        let needsReorder = false;
+        for (const id of existing) {
+            const idx = allLayers.indexOf(id);
+            if (idx < lastIdx) { needsReorder = true; break; }
+            lastIdx = idx;
         }
-        ['coeff-fill','coeff-line'].forEach(id => { if (m.getLayer(id)) m.moveLayer(id); });
-        // 3. Clusters coeff
-        ['coeff-cluster-circle','coeff-cluster-cluster','coeff-cluster-count'].forEach(id => {
-            if (m.getLayer(id)) m.moveLayer(id);
-        });
-        // 4. TA majorée
-        ['ta-maj-fill','ta-maj-line'].forEach(id => { if (m.getLayer(id)) m.moveLayer(id); });
-        for (let i = 0; i < 5; i++) {
-            if (m.getLayer(`ta-maj-hatch-${i}`)) m.moveLayer(`ta-maj-hatch-${i}`);
+        if (needsReorder) {
+            existing.forEach(id => m.moveLayer(id));
         }
-        ['ta-maj-cluster','ta-maj-cluster-count','ta-maj-point'].forEach(id => {
-            if (m.getLayer(id)) m.moveLayer(id);
-        });
-        // 5. POI OSM
-        ['osm-point'].forEach(id => {
-            if (m.getLayer(id)) m.moveLayer(id);
-        });
-        // 6. Prospects
-        ['prospects-circle','prospects-cluster','prospects-cluster-count'].forEach(id => {
-            if (m.getLayer(id)) m.moveLayer(id);
-        });
-        // 7. Dossiers — tout en haut
-        ['dossiers-circle','dossiers-cluster','dossiers-cluster-count'].forEach(id => {
-            if (m.getLayer(id)) m.moveLayer(id);
-        });
     });
 }

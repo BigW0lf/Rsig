@@ -85,8 +85,8 @@ export function loadTa(map) {
     showSpinner();
 
     if (zoom < DEPT_ZOOM) {
-        // Departements — cache par annee+mode (union n'est disponible qu'au zoom commune)
-        if (deptCache.fc && deptCache.annee === annee && mode === 'commune') {
+        // Departements — cache par annee (on est forcément à zoom dept ici, pas commune)
+        if (deptCache.fc && deptCache.annee === annee) {
             hideSpinner();
             upsert(map, deptCache.fc, propForZoom(champ, true));
             return;

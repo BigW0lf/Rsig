@@ -259,7 +259,7 @@ map.on('load', () => {
         if (ta.isActive())       ta.load();
         if (taMajore.isActive()) taMajore.load();
         saveState(map);
-    }, 200));
+    }, 350));
 
     // OSM Overpass : debounce long séparé pour ne pas saturer l'API publique
     map.on('moveend', debounce(() => {

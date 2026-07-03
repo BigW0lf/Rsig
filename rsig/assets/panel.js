@@ -2,7 +2,9 @@ const panelRight = document.getElementById('panel-right');
 const _legendEl  = document.getElementById('legend');
 
 function _syncLegendShift() {
-    _legendEl?.classList.toggle('legend-shifted', !panelRight.classList.contains('panel-closed'));
+    const open = !panelRight.classList.contains('panel-closed');
+    _legendEl?.classList.toggle('legend-shifted', open);
+    document.querySelector('#map-wrap .maplibregl-ctrl-bottom-right')?.classList.toggle('ctrl-shifted', open);
 }
 
 document.getElementById('close-right').addEventListener('click', () => {
@@ -30,7 +32,7 @@ function _renderPanel() {
 export function showInfo(layerKey, title, html) {
     _sections[layerKey] = { title, html };
     _renderPanel();
-    panelRight.scrollTop = 0;
+    document.getElementById('info-content').scrollTop = 0;
     _syncLegendShift();
 }
 
