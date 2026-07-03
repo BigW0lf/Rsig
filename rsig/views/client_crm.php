@@ -252,6 +252,63 @@
     </div>
     <?php endif; ?>
 
+    <!-- Contacts -->
+    <?php if (!empty($contacts)): ?>
+    <div class="client-section">
+        <div class="client-section-title">
+            Contacts
+            <span class="dos-nb"><?= count($contacts) ?></span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0">
+        <?php foreach ($contacts as $c): ?>
+        <?php
+            $badges = [];
+            if ($c['decisionnaire']) $badges[] = '<span style="background:#003189;color:#fff;border-radius:3px;padding:1px 6px;font-size:10px;font-weight:600">Décisionnaire</span>';
+            if ($c['topo'])         $badges[] = '<span style="background:#1a7a3c;color:#fff;border-radius:3px;padding:1px 6px;font-size:10px;font-weight:600">Topo</span>';
+        ?>
+        <div style="padding:12px 16px;border-bottom:1px solid var(--border2);border-right:1px solid var(--border2)">
+            <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px">
+                <div style="width:32px;height:32px;border-radius:50%;background:var(--blue-light);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                    <?= htmlspecialchars(mb_substr($c['fullname'] ?? '?', 0, 1)) ?>
+                </div>
+                <div>
+                    <div style="font-weight:600;font-size:13px">
+                        <?= htmlspecialchars(trim(($c['civilite'] ? $c['civilite'].' ' : '') . ($c['fullname'] ?? ''))) ?>
+                    </div>
+                    <?php if ($c['jobtitle']): ?>
+                    <div style="font-size:11px;color:var(--text3)"><?= htmlspecialchars($c['jobtitle']) ?></div>
+                    <?php endif; ?>
+                    <?php if ($badges): ?>
+                    <div style="display:flex;gap:4px;margin-top:3px"><?= implode('', $badges) ?></div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php if ($c['telephone1'] || $c['mobile'] || $c['telephone2']): ?>
+            <div style="font-size:12px;color:var(--text2);margin-bottom:2px">
+                <?php foreach (['telephone1'=>'Tél', 'mobile'=>'Mobile', 'telephone2'=>'Tél 2'] as $field => $label): ?>
+                <?php if ($c[$field]): ?>
+                <div>
+                    <span style="color:var(--text3)"><?= $label ?> :</span>
+                    <a href="tel:<?= htmlspecialchars(preg_replace('/\s+/','',$c[$field])) ?>" style="color:var(--blue-light)"><?= htmlspecialchars($c[$field]) ?></a>
+                </div>
+                <?php endif; ?>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+            <?php if ($c['email']): ?>
+            <div style="font-size:12px;margin-bottom:2px">
+                <a href="mailto:<?= htmlspecialchars($c['email']) ?>" style="color:var(--blue-light)"><?= htmlspecialchars($c['email']) ?></a>
+            </div>
+            <?php endif; ?>
+            <?php if ($c['ville']): ?>
+            <div style="font-size:11px;color:var(--text3)"><?= htmlspecialchars(trim(($c['adresse'] ? $c['adresse'].', ' : '') . ($c['code_postal'] ?? '') . ' ' . ($c['ville'] ?? ''))) ?></div>
+            <?php endif; ?>
+        </div>
+        <?php endforeach; ?>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <!-- Dossiers -->
     <div class="client-section">
         <div class="client-section-title">

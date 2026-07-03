@@ -148,6 +148,75 @@ function crmSync(PDO $db): array {
         ];
     }
 
+    // ── Table crm_contacts + UPSERT ──────────────────────────────────────────
+    $db->exec("CREATE TABLE IF NOT EXISTS crm_contacts (
+        contact_id    TEXT PRIMARY KEY,
+        account_id    TEXT,
+        civilite      TEXT,
+        fullname      TEXT,
+        jobtitle      TEXT,
+        telephone1    TEXT,
+        mobile        TEXT,
+        telephone2    TEXT,
+        email         TEXT,
+        adresse       TEXT,
+        code_postal   TEXT,
+        ville         TEXT,
+        decisionnaire BOOLEAN,
+        topo          BOOLEAN,
+        synced_at     TIMESTAMPTZ DEFAULT now()
+    )");
+    try { $db->exec("CREATE INDEX IF NOT EXISTS crm_contacts_account_idx ON crm_contacts (account_id)"); } catch (\Throwable) {}
+
+    $ctStmt = $db->prepare("
+        INSERT INTO crm_contacts
+            (contact_id, account_id, civilite, fullname, jobtitle,
+             telephone1, mobile, telephone2, email,
+             adresse, code_postal, ville, decisionnaire, topo, synced_at)
+        VALUES
+            (:contact_id, :account_id, :civilite, :fullname, :jobtitle,
+             :telephone1, :mobile, :telephone2, :email,
+             :adresse, :code_postal, :ville, :decisionnaire, :topo, now())
+        ON CONFLICT (contact_id) DO UPDATE SET
+            account_id    = EXCLUDED.account_id,
+            civilite      = EXCLUDED.civilite,
+            fullname      = EXCLUDED.fullname,
+            jobtitle      = EXCLUDED.jobtitle,
+            telephone1    = EXCLUDED.telephone1,
+            mobile        = EXCLUDED.mobile,
+            telephone2    = EXCLUDED.telephone2,
+            email         = EXCLUDED.email,
+            adresse       = EXCLUDED.adresse,
+            code_postal   = EXCLUDED.code_postal,
+            ville         = EXCLUDED.ville,
+            decisionnaire = EXCLUDED.decisionnaire,
+            topo          = EXCLUDED.topo,
+            synced_at     = now()
+    ");
+    $ctFields = 'contactid,fullname,rtx_civilite,jobtitle,telephone1,mobilephone,telephone2,emailaddress1,address1_line1,address1_postalcode,address1_city,new_decisionnaire,rtx_topo,_parentcustomerid_value';
+    $civiliteMap = ['957400000' => 'M.', '957400001' => 'Mme', '957400002' => 'Dr', '957400003' => 'Me'];
+    foreach (_fetchAllPages($token, "https://rtaxes.api.crm4.dynamics.com/api/data/v9.2/contacts?\$select={$ctFields}&\$filter=_parentcustomerid_value%20ne%20null") as $ct) {
+        $cid = $ct['contactid'] ?? null;
+        if (!$cid) continue;
+        $civCode = (string)($ct['rtx_civilite'] ?? '');
+        $ctStmt->execute([
+            ':contact_id'    => $cid,
+            ':account_id'    => $ct['_parentcustomerid_value'] ?? null,
+            ':civilite'      => $civCode !== '' ? ($civiliteMap[$civCode] ?? null) : null,
+            ':fullname'       => _cleanStr($ct['fullname'] ?? null),
+            ':jobtitle'      => _cleanStr($ct['jobtitle'] ?? null),
+            ':telephone1'    => $ct['telephone1'] ?? null,
+            ':mobile'        => $ct['mobilephone'] ?? null,
+            ':telephone2'    => $ct['telephone2'] ?? null,
+            ':email'         => $ct['emailaddress1'] ?? null,
+            ':adresse'       => _cleanStr($ct['address1_line1'] ?? null),
+            ':code_postal'   => $ct['address1_postalcode'] ?? null,
+            ':ville'         => _cleanStr($ct['address1_city'] ?? null),
+            ':decisionnaire' => isset($ct['new_decisionnaire']) ? ($ct['new_decisionnaire'] ? 'true' : 'false') : null,
+            ':topo'          => isset($ct['rtx_topo']) ? ($ct['rtx_topo'] ? 'true' : 'false') : null,
+        ]);
+    }
+
     // ── Cache sites depuis Dataverse ──────────────────────────────────────────
     $sitesMap = [];
     $siteFields = 'apo_siteid,apo_name,apo_adresse,apo_adressenormalisee,apo_ville,apo_codepostal,apo_codeinsee,apo_section,apo_parcelle,apo_lot,apo_montanttaxefonciere,apo_typeactivite,apo_x,apo_y';

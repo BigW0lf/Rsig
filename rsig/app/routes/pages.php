@@ -110,7 +110,22 @@ Flight::route('GET /client/@account_id', function ($account_id) {
     ");
     $stmt2->execute([':id' => $account_id]);
     $dossiers = $stmt2->fetchAll(PDO::FETCH_ASSOC);
-    Flight::render('client_crm', ['account' => $account, 'dossiers' => $dossiers]);
+
+    $contacts = [];
+    $hasContacts = (int)$db->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name='crm_contacts'")->fetchColumn();
+    if ($hasContacts) {
+        $stmt3 = $db->prepare("
+            SELECT civilite, fullname, jobtitle, telephone1, mobile, telephone2,
+                   email, adresse, code_postal, ville, decisionnaire, topo
+            FROM crm_contacts
+            WHERE account_id = :id
+            ORDER BY decisionnaire DESC NULLS LAST, fullname
+        ");
+        $stmt3->execute([':id' => $account_id]);
+        $contacts = $stmt3->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    Flight::render('client_crm', ['account' => $account, 'dossiers' => $dossiers, 'contacts' => $contacts]);
 });
 
 // ── Stats admin ───────────────────────────────────────────
