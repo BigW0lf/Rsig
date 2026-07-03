@@ -511,7 +511,9 @@ kbd {
                     <input type="range" id="prospects-surface" min="500" max="5000" step="100" value="500">
                 </label>
                 <div class="layer-hint" style="margin-bottom:6px">Filtre les parcelles dont le bâti est ≥ seuil</div>
-                <div class="prospect-crm-filter-row">
+                <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);display:block;margin-bottom:2px">Client / dénomination</label>
+                <input type="search" id="prospects-client-filter" class="df-input-inline" placeholder="Rechercher un nom…" autocomplete="off">
+                <div class="prospect-crm-filter-row" style="margin-top:6px">
                     <button id="prospects-rtaxes-only" class="prospect-rtaxes-btn" data-active="0">★ Clients RTaxes uniquement</button>
                 </div>
                 <div class="prospect-filter-title">Afficher les états</div>

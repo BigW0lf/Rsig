@@ -1029,6 +1029,50 @@ tbody tr:hover td { background: var(--blue-hover); }
 .bmc-attr a { color: var(--text3); }
 
 /* ═══════════════════════════════════════
+   AUTOCOMPLETE GLOBAL (appended to body)
+═══════════════════════════════════════ */
+.rsig-ac-dropdown {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    max-height: 220px;
+    overflow-y: auto;
+}
+.rsig-ac-item {
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--text);
+    cursor: pointer;
+    border-bottom: 1px solid var(--border2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.rsig-ac-item:last-child { border-bottom: none; }
+.rsig-ac-item:hover,
+.rsig-ac-item--active { background: var(--blue-hover); color: var(--blue); }
+
+/* Input texte dans panel gauche (filtres couches) */
+.layer-sub .df-input-inline {
+    width: 100%;
+    font-size: 11px;
+    padding: 4px 7px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text);
+    outline: none;
+    box-sizing: border-box;
+    margin-top: 2px;
+}
+.layer-sub .df-input-inline:focus { border-color: var(--blue-light); }
+.layer-sub .df-input-inline::placeholder { color: var(--text3); }
+
+/* ═══════════════════════════════════════
    OUTIL MESURE
 ═══════════════════════════════════════ */
 #measure-panel {

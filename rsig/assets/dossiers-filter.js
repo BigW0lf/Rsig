@@ -3,6 +3,7 @@
  * Filtre les features GeoJSON en mémoire sans re-fetch.
  * Usage : initDossiersFilter(map) → { getActiveFilters, applyFilters }
  */
+import { makeAutocomplete } from './utils.js';
 
 // ── Définition des champs filtrables ──────────────────────────────────────
 const FIELDS = [
@@ -18,6 +19,10 @@ const FIELDS = [
 
 // Valeurs uniques extraites du GeoJSON (peuplées dans setFullData)
 const _selectOptions = { auditeur: [], phase: [], etat: [] };
+// Valeurs uniques pour autocomplete sur champs texte
+const _textOptions = { client_name: [], ville: [], rtx_code: [] };
+// Champs texte avec autocomplete
+const AC_TEXT_FIELDS = new Set(['client_name', 'ville', 'rtx_code']);
 
 const OPERATORS = {
     text:   [
@@ -189,6 +194,20 @@ function buildForm() {
     const val1 = document.createElement('input');
     val1.className = 'df-input';
     val1.placeholder = 'Valeur…';
+    val1.autocomplete = 'off';
+
+    // Autocomplete sur les champs texte
+    let _acInstance = null;
+    function _rebindAc() {
+        if (_acInstance) { _acInstance.hide(); _acInstance = null; }
+        const fk = fieldSel.value;
+        if (AC_TEXT_FIELDS.has(fk)) {
+            _acInstance = makeAutocomplete(val1, (term) => {
+                const low = term.toLowerCase();
+                return (_textOptions[fk] || []).filter(v => v.toLowerCase().includes(low)).slice(0, 8);
+            });
+        }
+    }
 
     // Value select (pour les champs type 'select')
     const val1Sel = document.createElement('select');
@@ -214,7 +233,6 @@ function buildForm() {
             opSel.appendChild(opt);
         });
         if (type === 'select') {
-            // Peupler le select avec les valeurs uniques
             val1Sel.innerHTML = '';
             (_selectOptions[fieldDef.key] || []).forEach(v => {
                 const opt = document.createElement('option');
@@ -230,6 +248,7 @@ function buildForm() {
             val1.type = type === 'date' ? 'date' : (type === 'number' ? 'number' : 'text');
             val2.type = val1.type;
         }
+        _rebindAc();
         updateVal2();
     }
 
@@ -480,13 +499,19 @@ export function initDossiersFilter(map) {
 
                 const cachedVals = cached[key];
                 if (Array.isArray(cachedVals) && cachedVals.length === vals.length) {
-                    // Même nombre → on réutilise le cache
                     _selectOptions[key] = cachedVals;
                 } else {
                     _selectOptions[key] = vals;
                     cached[key] = vals;
                     changed = true;
                 }
+            });
+
+            // Valeurs uniques pour autocomplete texte (toujours recalculées, pas besoin de cache)
+            ['client_name', 'ville', 'rtx_code'].forEach(key => {
+                _textOptions[key] = [...new Set(
+                    fc.features.map(f => f.properties[key] ?? '').filter(Boolean)
+                )].sort((a, b) => a.localeCompare(b, 'fr'));
             });
 
             if (changed) {

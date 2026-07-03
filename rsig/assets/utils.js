@@ -43,6 +43,63 @@ export async function apiFetch(url, opts = {}) {
     }
 }
 
+// ── Autocomplete — dropdown fixed, bypass overflow:hidden ─
+export function makeAutocomplete(inputEl, getSuggestions) {
+    const dropdown = document.createElement('div');
+    dropdown.className = 'rsig-ac-dropdown';
+    document.body.appendChild(dropdown);
+    let activeIdx = -1;
+
+    function _pos() {
+        const r = inputEl.getBoundingClientRect();
+        dropdown.style.top   = r.bottom + 'px';
+        dropdown.style.left  = r.left   + 'px';
+        dropdown.style.width = r.width  + 'px';
+    }
+    function _hide() { dropdown.style.display = 'none'; activeIdx = -1; }
+    function _render(items) {
+        dropdown.innerHTML = '';
+        if (!items.length) { _hide(); return; }
+        items.forEach(item => {
+            const el = document.createElement('div');
+            el.className = 'rsig-ac-item';
+            el.textContent = item;
+            el.addEventListener('mousedown', e => {
+                e.preventDefault();
+                inputEl.value = item;
+                _hide();
+                inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+            dropdown.appendChild(el);
+        });
+        activeIdx = -1;
+        _pos();
+        dropdown.style.display = 'block';
+    }
+    inputEl.addEventListener('input', () => {
+        const v = inputEl.value.trim();
+        if (!v) { _hide(); return; }
+        _render(getSuggestions(v).slice(0, 8));
+    });
+    inputEl.addEventListener('keydown', e => {
+        const items = dropdown.querySelectorAll('.rsig-ac-item');
+        if (!items.length || dropdown.style.display === 'none') return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeIdx = Math.min(activeIdx + 1, items.length - 1);
+            items.forEach((el, i) => el.classList.toggle('rsig-ac-item--active', i === activeIdx));
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeIdx = Math.max(activeIdx - 1, 0);
+            items.forEach((el, i) => el.classList.toggle('rsig-ac-item--active', i === activeIdx));
+        } else if (e.key === 'Enter' && activeIdx >= 0) {
+            e.preventDefault(); items[activeIdx].dispatchEvent(new MouseEvent('mousedown'));
+        } else if (e.key === 'Escape') { _hide(); }
+    });
+    inputEl.addEventListener('blur', () => setTimeout(_hide, 150));
+    return { hide: _hide };
+}
+
 // ── Debounce — trailing + leading edge optionnel ──────────
 export function debounce(fn, delay, { leading = false } = {}) {
     let t;

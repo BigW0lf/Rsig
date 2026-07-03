@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, bddOnTop, apiFetch, debounce } from '../utils.js';
+import { showSpinner, hideSpinner, bddOnTop, apiFetch, debounce, makeAutocomplete } from '../utils.js';
 import { isMeasuring } from '../measure.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
@@ -31,6 +31,7 @@ const COLOR_LOW  = '#eab308';
 // ── Filtres actifs ─────────────────────────────────────────────────────────
 let _activeStatuts  = new Set(['nouveau','contacte','en_attente','annule','client']);
 let _rtaxesOnly     = false;
+let _clientFilter   = '';
 
 function _getSurfaceMin() {
     const sl = document.getElementById('prospects-surface');
@@ -41,10 +42,12 @@ function _applyFilter() {
     const src = map_ref?.getSource('prospects-src');
     if (!src || !_allFeatures.length) return;
     const minSurf = _getSurfaceMin();
+    const clientTerm = _clientFilter.toLowerCase();
     const filtered = _allFeatures.filter(f => {
         if ((f.properties.surface_bati_m2 ?? 0) < minSurf) return false;
         if (!_activeStatuts.has(f.properties.statut ?? 'nouveau')) return false;
         if (_rtaxesOnly && !f.properties.crm_account_id) return false;
+        if (clientTerm && !(f.properties.denomination ?? '').toLowerCase().includes(clientTerm)) return false;
         return true;
     });
     src.setData({ type: 'FeatureCollection', features: filtered });
@@ -200,6 +203,32 @@ export function initProspects(map) {
         });
     }
 
+    // Filtre client / dénomination avec autocomplete
+    const clientInput = document.getElementById('prospects-client-filter');
+    if (clientInput) {
+        const applyClientDebounced = debounce(() => {
+            _clientFilter = clientInput.value.trim();
+            _applyFilter();
+        }, 120);
+        clientInput.addEventListener('input', applyClientDebounced);
+
+        makeAutocomplete(clientInput, (term) => {
+            if (!_allFeatures.length) return [];
+            const low = term.toLowerCase();
+            const seen = new Set();
+            const results = [];
+            for (const f of _allFeatures) {
+                const name = f.properties.denomination ?? '';
+                if (name && name.toLowerCase().includes(low) && !seen.has(name)) {
+                    seen.add(name);
+                    results.push(name);
+                    if (results.length >= 8) break;
+                }
+            }
+            return results;
+        });
+    }
+
     // Bouton "Clients RTaxes uniquement"
     const rtaxesBtn = document.getElementById('prospects-rtaxes-only');
     if (rtaxesBtn) {
@@ -250,6 +279,9 @@ export function initProspects(map) {
             loaded = false;
             _allFeatures = [];
             _rtaxesOnly  = false;
+            _clientFilter = '';
+            const clientInput = document.getElementById('prospects-client-filter');
+            if (clientInput) clientInput.value = '';
             const btn = document.getElementById('prospects-rtaxes-only');
             if (btn) btn.dataset.active = '0';
             dropLegend('prospects');
