@@ -463,7 +463,7 @@ Flight::route('GET /api/taux/departements', function () {
 // ── Prospects coeff localisation ─────────────────────────────────────────
 
 Flight::route('GET /api/prospects', function () {
-    if (!isAdmin()) { Flight::json(['error' => 'Accès refusé'], 403); return; }
+    if (!isAuthenticated()) { Flight::json(['error' => 'Accès refusé'], 403); return; }
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $hasTable = (int)$db->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name='coeff_pm_bat_final'")->fetchColumn();
     if (!$hasTable) { Flight::json(['type' => 'FeatureCollection', 'features' => []]); return; }
@@ -537,7 +537,7 @@ Flight::route('POST /api/prospects/statut', function () {
 });
 
 Flight::route('GET /api/prospects/occupants', function () {
-    if (!isAdmin()) { Flight::json(['error' => 'Accès refusé'], 403); return; }
+    if (!isAuthenticated()) { Flight::json(['error' => 'Accès refusé'], 403); return; }
     $idu = preg_replace('/[^A-Za-z0-9]/', '', Flight::request()->query['idu'] ?? '');
     if (!$idu) { Flight::json([], 400); return; }
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
