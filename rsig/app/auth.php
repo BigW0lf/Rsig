@@ -5,6 +5,7 @@ function authStart(): void {
 }
 
 function isAuthenticated(): bool {
+    if (!AUTH_ENABLED) return true;
     authStart();
     return isset($_SESSION['user_tid']) && $_SESSION['user_tid'] === DYN_TENANT_ID;
 }

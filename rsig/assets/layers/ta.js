@@ -130,6 +130,7 @@ export function initTa(map) {
     // Peupler sélecteur millésimes zones majorées
     if (milUnionSel) {
         fetch('/api/ta/majore/millesimes').then(r => r.json()).then(mils => {
+            if (!Array.isArray(mils)) return;
             const opt0 = document.createElement('option');
             opt0.value = ''; opt0.textContent = 'Dernier en vigueur';
             milUnionSel.appendChild(opt0);

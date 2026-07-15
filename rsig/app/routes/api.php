@@ -473,8 +473,10 @@ Flight::route('GET /api/prospects', function () {
         statut varchar(20) NOT NULL DEFAULT 'nouveau'
             CHECK (statut IN ('nouveau','contacte','en_attente','annule','client')),
         note text,
+        commercial varchar(20) DEFAULT NULL,
         updated_at timestamp DEFAULT now()
     )");
+    $db->exec("ALTER TABLE prospects_statut ADD COLUMN IF NOT EXISTS commercial varchar(20) DEFAULT NULL");
     $sql = "SELECT
                 c.idu, c.denomination, c.numero_siren, c.forme_juridique_abregee,
                 c.adresse, c.codecommune AS code_insee,
@@ -486,6 +488,7 @@ Flight::route('GET /api/prospects', function () {
                 array_to_string(ARRAY(SELECT DISTINCT u FROM unnest(c.usages_bat) u), ' | ') AS usages,
                 COALESCE(ps.statut, 'nouveau') AS statut,
                 COALESCE(ps.note, '') AS note,
+                COALESCE(ps.commercial, '') AS commercial,
                 crm.crm_client_name,
                 crm.crm_account_id,
                 ST_AsGeoJSON(ST_Transform(ST_Centroid(c.geom), 4326), 6)::text AS geojson
@@ -517,8 +520,10 @@ Flight::route('POST /api/prospects/statut', function () {
     $idu    = preg_replace('/[^A-Za-z0-9]/', '', $body['idu']    ?? '');
     $statut = $body['statut'] ?? '';
     $note   = substr(trim($body['note'] ?? ''), 0, 500);
-    $allowed = ['nouveau','contacte','en_attente','annule','client'];
-    if (!$idu || !in_array($statut, $allowed, true)) {
+    $commercial = $body['commercial'] ?? '';
+    $allowedStatuts = ['nouveau','contacte','en_attente','annule','client'];
+    $allowedCommerciaux = ['','laurent','mathilde','leo','nathalie'];
+    if (!$idu || !in_array($statut, $allowedStatuts, true) || !in_array($commercial, $allowedCommerciaux, true)) {
         Flight::json(['error' => 'Paramètres invalides'], 400); return;
     }
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
@@ -527,12 +532,15 @@ Flight::route('POST /api/prospects/statut', function () {
         statut varchar(20) NOT NULL DEFAULT 'nouveau'
             CHECK (statut IN ('nouveau','contacte','en_attente','annule','client')),
         note text,
+        commercial varchar(20) DEFAULT NULL,
         updated_at timestamp DEFAULT now()
     )");
-    $stmt = $db->prepare("INSERT INTO prospects_statut (idu, statut, note, updated_at)
-        VALUES (:idu, :statut, :note, now())
-        ON CONFLICT (idu) DO UPDATE SET statut=EXCLUDED.statut, note=EXCLUDED.note, updated_at=now()");
-    $stmt->execute([':idu' => $idu, ':statut' => $statut, ':note' => $note]);
+    $db->exec("ALTER TABLE prospects_statut ADD COLUMN IF NOT EXISTS commercial varchar(20) DEFAULT NULL");
+    $commercialVal = $commercial === '' ? null : $commercial;
+    $stmt = $db->prepare("INSERT INTO prospects_statut (idu, statut, note, commercial, updated_at)
+        VALUES (:idu, :statut, :note, :commercial, now())
+        ON CONFLICT (idu) DO UPDATE SET statut=EXCLUDED.statut, note=EXCLUDED.note, commercial=EXCLUDED.commercial, updated_at=now()");
+    $stmt->execute([':idu' => $idu, ':statut' => $statut, ':note' => $note, ':commercial' => $commercialVal]);
     Flight::json(['ok' => true]);
 });
 

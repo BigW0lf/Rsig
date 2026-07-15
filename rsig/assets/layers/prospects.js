@@ -28,10 +28,25 @@ const COLOR_HIGH = '#dc2626';
 const COLOR_MED  = '#f97316';
 const COLOR_LOW  = '#eab308';
 
+// ── Couleurs par commercial ───────────────────────────────────────────────────
+const COM_COLOR = {
+    laurent:  '#0ea5e9',   // bleu ciel
+    mathilde: '#f43f5e',   // rose
+    leo:      '#f59e0b',   // ambre
+    nathalie: '#a855f7',   // violet
+};
+const COM_LABEL = {
+    laurent:  'Laurent',
+    mathilde: 'Mathilde',
+    leo:      'Léo',
+    nathalie: 'Nathalie',
+};
+
 // ── Filtres actifs ─────────────────────────────────────────────────────────
-let _activeStatuts  = new Set(['nouveau','contacte','en_attente','annule','client']);
-let _rtaxesOnly     = false;
-let _clientFilter   = '';
+let _activeStatuts      = new Set(['nouveau','contacte','en_attente','annule','client']);
+let _activeCommerciaux  = new Set(['__tous__','__non_attribue__','laurent','mathilde','leo','nathalie']);
+let _rtaxesOnly         = false;
+let _clientFilter       = '';
 
 function _getSurfaceMin() {
     const sl = document.getElementById('prospects-surface');
@@ -48,17 +63,27 @@ function _applyFilter() {
         if (!_activeStatuts.has(f.properties.statut ?? 'nouveau')) return false;
         if (_rtaxesOnly && !f.properties.crm_account_id) return false;
         if (clientTerm && !(f.properties.denomination ?? '').toLowerCase().includes(clientTerm)) return false;
+        // filtre commercial
+        if (!_activeCommerciaux.has('__tous__')) {
+            const com = f.properties.commercial || '';
+            if (com === '') {
+                if (!_activeCommerciaux.has('__non_attribue__')) return false;
+            } else {
+                if (!_activeCommerciaux.has(com)) return false;
+            }
+        }
         return true;
     });
     src.setData({ type: 'FeatureCollection', features: filtered });
 }
 
-// Met à jour le statut d'un feature dans _allFeatures (après save)
-function _patchStatut(idu, statut, note) {
+// Met à jour statut + commercial dans _allFeatures (après save)
+function _patchStatut(idu, statut, note, commercial) {
     _allFeatures.forEach(f => {
         if (f.properties.idu === idu) {
-            f.properties.statut = statut;
-            f.properties.note   = note;
+            f.properties.statut     = statut;
+            f.properties.note       = note;
+            f.properties.commercial = commercial;
         }
     });
 }
@@ -78,6 +103,10 @@ function showProspectPanel(p) {
     const statutSel = Object.entries(STATUT_LABEL).map(([v, l]) =>
         `<option value="${v}"${p.statut === v ? ' selected' : ''}>${l}</option>`
     ).join('');
+    const comSel = `<option value=""${!p.commercial ? ' selected' : ''}>— Non attribué —</option>` +
+        Object.entries(COM_LABEL).map(([v, l]) =>
+            `<option value="${v}"${p.commercial === v ? ' selected' : ''}>${l}</option>`
+        ).join('');
 
     const crmBadge = p.crm_account_id
         ? `<a class="prospect-crm-badge" href="/client/${encodeURIComponent(p.crm_account_id)}" target="_blank" rel="noopener">
@@ -101,9 +130,15 @@ function showProspectPanel(p) {
         irow('Usage IGN',     p.usages) +
         `<div class="prospect-statut-block" id="pstat-${p.idu}">
             <div class="prospect-statut-row">
-                <label class="prospect-statut-label">État commercial</label>
+                <label class="prospect-statut-label">État</label>
                 <select class="prospect-statut-sel" data-idu="${p.idu}">
                     ${statutSel}
+                </select>
+            </div>
+            <div class="prospect-statut-row">
+                <label class="prospect-statut-label">Commercial</label>
+                <select class="prospect-com-sel" data-idu="${p.idu}">
+                    ${comSel}
                 </select>
             </div>
             <textarea class="prospect-note-area" data-idu="${p.idu}" placeholder="Note…">${p.note || ''}</textarea>
@@ -123,19 +158,21 @@ function showProspectPanel(p) {
     if (block) {
         block.querySelector('.prospect-save-btn').addEventListener('click', () => {
             const sel  = block.querySelector('.prospect-statut-sel');
+            const comSelEl = block.querySelector('.prospect-com-sel');
             const note = block.querySelector('.prospect-note-area');
             const msg  = document.getElementById(`psave-msg-${p.idu}`);
-            const newStatut = sel.value;
-            const newNote   = note.value;
+            const newStatut     = sel.value;
+            const newCommercial = comSelEl ? comSelEl.value : '';
+            const newNote       = note.value;
             fetch('/api/prospects/statut', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ idu: p.idu, statut: newStatut, note: newNote }),
+                body: JSON.stringify({ idu: p.idu, statut: newStatut, note: newNote, commercial: newCommercial }),
             })
             .then(r => r.json())
             .then(res => {
                 if (res.ok) {
-                    _patchStatut(p.idu, newStatut, newNote);
+                    _patchStatut(p.idu, newStatut, newNote, newCommercial);
                     _applyFilter();
                     if (msg) { msg.style.display = 'inline'; setTimeout(() => msg.style.display = 'none', 2500); }
                 }
@@ -176,13 +213,14 @@ function showProspectPanel(p) {
         });
 }
 
-// ── Légende avec statuts ───────────────────────────────────────────────────────
-function _saveLegendStatut() {
+// ── Légende ────────────────────────────────────────────────────────────────────
+function _saveLegend() {
     saveLegend(
         'prospects',
-        'Prospects – état commercial',
-        ['Nouveau (↑ évol)', 'Contacté', 'En attente', 'Annulé', 'Client'],
-        [COLOR_HIGH, STATUT_COLOR.contacte, STATUT_COLOR.en_attente, STATUT_COLOR.annule, STATUT_COLOR.client]
+        'Prospects – commercial / état',
+        ['Laurent', 'Mathilde', 'Léo', 'Nathalie', '— Non attribué —', 'Contacté', 'En attente', 'Annulé', 'Client'],
+        [COM_COLOR.laurent, COM_COLOR.mathilde, COM_COLOR.leo, COM_COLOR.nathalie,
+         COLOR_HIGH, STATUT_COLOR.contacte, STATUT_COLOR.en_attente, STATUT_COLOR.annule, STATUT_COLOR.client]
     );
 }
 
@@ -249,6 +287,26 @@ export function initProspects(map) {
         });
     });
 
+    // Checkboxes commercial — "Tous" coche/décoche tout
+    document.querySelectorAll('.prospect-com-filter').forEach(cb => {
+        cb.addEventListener('change', () => {
+            if (cb.value === '__tous__') {
+                const checked = cb.checked;
+                document.querySelectorAll('.prospect-com-filter').forEach(c => { c.checked = checked; });
+            } else {
+                const tousCb = document.querySelector('.prospect-com-filter[value="__tous__"]');
+                if (tousCb) {
+                    const allOthers = [...document.querySelectorAll('.prospect-com-filter:not([value="__tous__"])')];
+                    tousCb.checked = allOthers.every(c => c.checked);
+                }
+            }
+            _activeCommerciaux = new Set(
+                [...document.querySelectorAll('.prospect-com-filter:checked')].map(c => c.value)
+            );
+            _applyFilter();
+        });
+    });
+
     // ── Handlers carte ───────────────────────────────────────────────────────
     map.on('mouseenter', 'prospects-circle',  () => map.getCanvas().style.cursor = 'pointer');
     map.on('mouseleave', 'prospects-circle',  () => map.getCanvas().style.cursor = '');
@@ -280,10 +338,12 @@ export function initProspects(map) {
             _allFeatures = [];
             _rtaxesOnly  = false;
             _clientFilter = '';
+            _activeCommerciaux = new Set(['__tous__','__non_attribue__','laurent','mathilde','leo','nathalie']);
             const clientInput = document.getElementById('prospects-client-filter');
             if (clientInput) clientInput.value = '';
             const btn = document.getElementById('prospects-rtaxes-only');
             if (btn) btn.dataset.active = '0';
+            document.querySelectorAll('.prospect-com-filter').forEach(c => { c.checked = true; });
             dropLegend('prospects');
             clearInfo('prospects');
             return;
@@ -311,16 +371,21 @@ export function initProspects(map) {
                     cluster: true, clusterRadius: 40, clusterMaxZoom: 13,
                 });
 
-                // Couleur = statut d'abord, sinon évolution
+                // Couleur = commercial d'abord, sinon statut, sinon évolution
                 map.addLayer({ id: 'prospects-circle', type: 'circle', source: 'prospects-src',
                     filter: ['!', ['has', 'point_count']],
                     paint: {
                         'circle-color': ['case',
+                            ['==', ['get', 'commercial'], 'laurent'],  COM_COLOR.laurent,
+                            ['==', ['get', 'commercial'], 'mathilde'], COM_COLOR.mathilde,
+                            ['==', ['get', 'commercial'], 'leo'],      COM_COLOR.leo,
+                            ['==', ['get', 'commercial'], 'nathalie'], COM_COLOR.nathalie,
+                            // pas de commercial → couleur statut
                             ['==', ['get', 'statut'], 'contacte'],   STATUT_COLOR.contacte,
                             ['==', ['get', 'statut'], 'en_attente'], STATUT_COLOR.en_attente,
                             ['==', ['get', 'statut'], 'annule'],     STATUT_COLOR.annule,
                             ['==', ['get', 'statut'], 'client'],     STATUT_COLOR.client,
-                            // nouveau → couleur évolution
+                            // nouveau non attribué → couleur évolution
                             ['>=', ['to-number', ['get', 'evol_pct']], 20], COLOR_HIGH,
                             ['>=', ['to-number', ['get', 'evol_pct']], 10], COLOR_MED,
                             COLOR_LOW,
@@ -357,7 +422,7 @@ export function initProspects(map) {
                 });
 
                 loaded = true;
-                _saveLegendStatut();
+                _saveLegend();
                 bddOnTop(map);
             })
             .catch(() => hideSpinner());

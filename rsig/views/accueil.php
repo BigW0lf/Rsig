@@ -516,13 +516,28 @@ kbd {
                 <div class="prospect-crm-filter-row" style="margin-top:6px">
                     <button id="prospects-rtaxes-only" class="prospect-rtaxes-btn" data-active="0">★ Clients RTaxes uniquement</button>
                 </div>
-                <div class="prospect-filter-title">Afficher les états</div>
-                <div class="prospect-filter-statuts">
-                    <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="nouveau" checked><span class="prospect-filter-dot" style="background:#dc2626"></span>Nouveau</label>
-                    <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="contacte" checked><span class="prospect-filter-dot" style="background:#3b82f6"></span>Contacté</label>
-                    <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="en_attente" checked><span class="prospect-filter-dot" style="background:#8b5cf6"></span>En attente</label>
-                    <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="annule" checked><span class="prospect-filter-dot" style="background:#94a3b8"></span>Annulé</label>
-                    <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="client" checked><span class="prospect-filter-dot" style="background:#16a34a"></span>Client</label>
+                <div class="prospect-filter-dual">
+                    <div>
+                        <div class="prospect-filter-title">États</div>
+                        <div class="prospect-filter-statuts">
+                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="nouveau" checked><span class="prospect-filter-dot" style="background:#dc2626"></span>Nouveau</label>
+                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="contacte" checked><span class="prospect-filter-dot" style="background:#3b82f6"></span>Contacté</label>
+                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="en_attente" checked><span class="prospect-filter-dot" style="background:#8b5cf6"></span>En attente</label>
+                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="annule" checked><span class="prospect-filter-dot" style="background:#94a3b8"></span>Annulé</label>
+                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-statut-filter" value="client" checked><span class="prospect-filter-dot" style="background:#16a34a"></span>Client</label>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="prospect-filter-title">Commercial</div>
+                        <div class="prospect-filter-commerciaux">
+                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="__tous__" checked><span class="prospect-filter-dot" style="background:var(--text3)"></span>Tous</label>
+                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="__non_attribue__" checked><span class="prospect-filter-dot" style="background:#e2e8f0;border:1px solid #94a3b8"></span>—</label>
+                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="laurent" checked><span class="prospect-filter-dot" style="background:#0ea5e9"></span>Laurent</label>
+                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="mathilde" checked><span class="prospect-filter-dot" style="background:#f43f5e"></span>Mathilde</label>
+                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="leo" checked><span class="prospect-filter-dot" style="background:#f59e0b"></span>Léo</label>
+                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="nathalie" checked><span class="prospect-filter-dot" style="background:#a855f7"></span>Nathalie</label>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

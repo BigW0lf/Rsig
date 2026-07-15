@@ -217,7 +217,7 @@ export function initTaMajore(map) {
     const milSel = document.getElementById('ta-majore-millesime');
 
     fetch('/api/ta/majore/millesimes').then(r => r.json()).then(mils => {
-        if (!milSel) return;
+        if (!milSel || !Array.isArray(mils)) return;
         const opt0 = document.createElement('option');
         opt0.value = ''; opt0.textContent = 'Dernier en vigueur';
         milSel.appendChild(opt0);
