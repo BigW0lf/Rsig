@@ -29,6 +29,10 @@ try {
            ':m' => 'Sync OK — ' . $result['dossiers'] . ' dossiers traités',
            ':id'=> $logId,
        ]);
+    // Invalider le cache GeoJSON CRM après sync réussie
+    foreach (['crm_geojson_main', 'crm_geojson_fallback'] as $k) {
+        @unlink(sys_get_temp_dir() . '/rsig_cache/' . $k . '.json');
+    }
 } catch (\Throwable $e) {
     $db->prepare("UPDATE crm_sync_log SET finished_at=now(), status='error', message=:m WHERE id=:id")
        ->execute([':m' => $e->getMessage(), ':id' => $logId]);

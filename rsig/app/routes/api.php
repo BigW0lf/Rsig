@@ -140,6 +140,10 @@ Flight::route('GET /api/crm/geojson', function () {
                 WHERE geom IS NOT NULL";
     }
 
+    $cacheKey = 'crm_geojson_' . ($count > 0 ? 'main' : 'fallback');
+    $cached = cacheGet($cacheKey);
+    if ($cached !== null) { Flight::json($cached); return; }
+
     $stmt = $db->query($sql);
     $features = [];
     foreach ($stmt as $row) {
@@ -147,7 +151,9 @@ Flight::route('GET /api/crm/geojson', function () {
         unset($row['geojson']);
         $features[] = ['type'=>'Feature','geometry'=>$g,'properties'=>$row];
     }
-    Flight::json(['type'=>'FeatureCollection','features'=>$features]);
+    $fc = ['type'=>'FeatureCollection','features'=>$features];
+    cacheSet($cacheKey, $fc, 300);
+    Flight::json($fc);
 });
 
 // ── Fiche client CRM (depuis crm_dossiers) ───────────────────────────────────
@@ -1876,8 +1882,12 @@ Flight::route('GET /api/tarifs/departements', function () {
     if (!$cat || !preg_match('/^[A-Z]{3}[0-9]$/', $cat)) {
         Flight::json(['error' => 'categorie invalide'], 400); return;
     }
-    $annee = validateAnnee(Flight::request()->query['annee'] ?? '');
-    $col   = "val_$annee";
+    $annee  = validateAnnee(Flight::request()->query['annee'] ?? '');
+    $cacheKey = 'tarifs_dep_' . $cat . '_' . $annee;
+    $cached = cacheGet($cacheKey);
+    if ($cached !== null) { Flight::json($cached); return; }
+
+    $col = "val_$annee";
     $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
                    t_avg.valeur,
                    ST_AsGeoJSON(ST_SimplifyPreserveTopology(d.geom, 0.01),4)::text AS geojson
@@ -1890,7 +1900,9 @@ Flight::route('GET /api/tarifs/departements', function () {
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':cat', $cat);
     $stmt->execute();
-    Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
+    $fc = ['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)];
+    cacheSet($cacheKey, $fc, 3600);
+    Flight::json($fc);
 });
 
 // ── BOFIP — parse tarifs / circonscriptions ───────────────

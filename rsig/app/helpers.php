@@ -1,6 +1,27 @@
 <?php
 
 define('DB_FLAG_PATH', __DIR__ . '/../../db_offline.flag');
+define('CACHE_DIR', sys_get_temp_dir() . '/rsig_cache');
+
+function cacheGet(string $key): mixed {
+    $file = CACHE_DIR . '/' . $key . '.json';
+    if (!file_exists($file)) return null;
+    $data = json_decode(file_get_contents($file), true);
+    if (!$data || ($data['expires'] ?? 0) < time()) {
+        @unlink($file);
+        return null;
+    }
+    return $data['payload'];
+}
+
+function cacheSet(string $key, mixed $payload, int $ttl = 3600): void {
+    if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0755, true);
+    file_put_contents(
+        CACHE_DIR . '/' . $key . '.json',
+        json_encode(['expires' => time() + $ttl, 'payload' => $payload]),
+        LOCK_EX
+    );
+}
 
 function isDbOffline(): bool {
     return file_exists(DB_FLAG_PATH);
