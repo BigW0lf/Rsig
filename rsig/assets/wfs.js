@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner } from './utils.js';
+import { showSpinner, hideSpinner, EMPTY_FC } from './utils.js';
 import { isMeasuring } from './measure.js';
 import { hasVisibleLayer } from './catalogue.js';
 
@@ -127,14 +127,17 @@ export function updateWfs(map) {
     ctrl = new AbortController();
     showSpinner();
 
-    const params = new URLSearchParams({
-        SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature',
-        TYPENAMES: typeNames[type], SRSNAME: 'EPSG:4326',
-        BBOX: type === 'departements' ? '-5.14,41.33,9.56,51.09,EPSG:4326' : bbox + ',EPSG:4326',
-        OUTPUTFORMAT: 'application/json', COUNT: maxFeat[type],
-    });
+    // Départements : proxy local PG (cache 24h, ~200KB) au lieu d'IGN WFS (33MB, externe)
+    const fetchUrl = type === 'departements'
+        ? '/api/wfs/departements'
+        : 'https://data.geopf.fr/wfs/ows?' + new URLSearchParams({
+            SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature',
+            TYPENAMES: typeNames[type], SRSNAME: 'EPSG:4326',
+            BBOX: bbox + ',EPSG:4326',
+            OUTPUTFORMAT: 'application/json', COUNT: maxFeat[type],
+        });
 
-    fetch('https://data.geopf.fr/wfs/ows?' + params, { signal: ctrl.signal })
+    fetch(fetchUrl, { signal: ctrl.signal })
     .then(r => { if (!r.ok) throw new Error('WFS ' + r.status); return r.text(); })
     .then(text => {
         let data;

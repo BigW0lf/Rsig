@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, PAL, bddOnTop, apiFetch } from '../utils.js';
+import { showSpinner, hideSpinner, PAL, bddOnTop, apiFetch, EMPTY_FC } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 
@@ -83,7 +83,7 @@ export function loadSections(map) {
         if (getLevel(map.getZoom()) !== renderLevel) return;
         if (!fc?.features?.length) {
             if (map.getSource('sections-src'))
-                map.getSource('sections-src').setData({ type: 'FeatureCollection', features: [] });
+                map.getSource('sections-src').setData(EMPTY_FC);
             return;
         }
         // Au niveau section, le champ est 'secteur' ; sinon 'secteur_dom'

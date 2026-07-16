@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, bddOnTop, apiFetch } from '../utils.js';
+import { showSpinner, hideSpinner, bddOnTop, apiFetch, EMPTY_FC } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 
@@ -171,7 +171,7 @@ function load(map) {
         .then(fc => {
             hideSpinner();
             if (!active) return;
-            const empty = { type:'FeatureCollection', features:[] };
+            const empty = EMPTY_FC;
 
             if (!fc?.features?.length) {
                 if (map.getSource('ta-maj-poly')) map.getSource('ta-maj-poly').setData(empty);

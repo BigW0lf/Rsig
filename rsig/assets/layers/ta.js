@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, stepExpr, computeBreaks, PAL, bddOnTop, apiFetch } from '../utils.js';
+import { showSpinner, hideSpinner, stepExpr, computeBreaks, PAL, bddOnTop, apiFetch, EMPTY_FC } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 
@@ -111,7 +111,7 @@ export function loadTa(map) {
                 hideSpinner();
                 if (myId !== loadId) return;
                 if (!fc?.features?.length) {
-                    if (map.getSource('ta-src')) map.getSource('ta-src').setData({ type: 'FeatureCollection', features: [] });
+                    if (map.getSource('ta-src')) map.getSource('ta-src').setData(EMPTY_FC);
                     return;
                 }
                 upsert(map, fc, propForZoom(champ, false));

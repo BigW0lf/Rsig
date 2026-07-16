@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop, apiFetch } from '../utils.js';
+import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop, apiFetch, EMPTY_FC } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 
@@ -65,7 +65,7 @@ export function loadTarifs(map) {
         if (myId !== loadId || !active) return;
         if (getLevel(map.getZoom()) !== renderLevel) return;
         if (!fc?.features?.length) {
-            if (map.getSource('tarifs-src')) map.getSource('tarifs-src').setData({ type: 'FeatureCollection', features: [] });
+            if (map.getSource('tarifs-src')) map.getSource('tarifs-src').setData(EMPTY_FC);
             return;
         }
         const breaks      = computeBreaks(fc.features.map(f => +f.properties.valeur).filter(v => isFinite(v) && v > 0), 7);

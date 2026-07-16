@@ -592,6 +592,37 @@ Flight::route('GET /api/taux/departements', function () {
     Flight::json($result);
 });
 
+// ── WFS proxy — départements depuis PG (remplace fetch IGN 33MB) ─────────────
+Flight::route('GET /api/wfs/departements', function () {
+    $cacheKey = 'wfs_departements';
+    $etag     = '"' . md5($cacheKey) . '"';
+    if (isNotModified($etag)) { Flight::halt(304); }
+    $cached = cacheGet($cacheKey);
+    if ($cached !== null) {
+        header('Cache-Control: public, max-age=86400');
+        header('ETag: ' . $etag);
+        Flight::json($cached); return;
+    }
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $stmt = $db->query("
+        SELECT code_insee, nom_officiel AS nom_dep,
+               ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.005), 4)::text AS geojson
+        FROM departements_geom_4326
+        ORDER BY code_insee
+    ");
+    $features = [];
+    foreach ($stmt as $row) {
+        $g = json_decode($row['geojson'], true);
+        $features[] = ['type' => 'Feature', 'geometry' => $g,
+                       'properties' => ['code_insee' => $row['code_insee'], 'nom_officiel' => $row['nom_dep']]];
+    }
+    $fc = ['type' => 'FeatureCollection', 'features' => $features];
+    cacheSet($cacheKey, $fc, 86400);
+    header('Cache-Control: public, max-age=86400');
+    header('ETag: ' . $etag);
+    Flight::json($fc);
+});
+
 // ── Prospects coeff localisation ─────────────────────────────────────────
 
 Flight::route('GET /api/prospects', function () {

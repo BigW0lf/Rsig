@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, bddOnTop } from '../utils.js';
+import { showSpinner, hideSpinner, bddOnTop, EMPTY_FC } from '../utils.js';
 import { isMeasuring } from '../measure.js';
 
 const OVERPASS = 'https://overpass-api.de/api/interpreter';
@@ -156,7 +156,7 @@ export function initOsm(map) {
 
     map.addSource('osm-src', {
         type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
+        data: EMPTY_FC,
     });
 
     map.addLayer({ id: 'osm-point', type: 'symbol', source: 'osm-src',
@@ -229,7 +229,7 @@ export function initOsm(map) {
         clearTimeout(_retryTimer);
         if (!active) {
             setVis('none');
-            map.getSource('osm-src')?.setData({ type: 'FeatureCollection', features: [] });
+            map.getSource('osm-src')?.setData(EMPTY_FC);
             if (_popup) { _popup.remove(); _popup = null; }
             if (_ctrl) _ctrl.abort();
             _lastBbox = null;

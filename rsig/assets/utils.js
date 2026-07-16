@@ -111,6 +111,9 @@ export function debounce(fn, delay, { leading = false } = {}) {
     };
 }
 
+// ── Singleton FeatureCollection vide — réutilisé pour éviter les allocations GC
+export const EMPTY_FC = Object.freeze({ type: 'FeatureCollection', features: Object.freeze([]) });
+
 // ── Choroplèthe ───────────────────────────────────────────
 export function computeBreaks(values, n) {
     const sorted = values.filter(v => v != null && isFinite(v)).sort((a, b) => a - b);

@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop, apiFetch } from '../utils.js';
+import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop, apiFetch, EMPTY_FC } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 
@@ -79,7 +79,7 @@ export function loadTaux(map) {
 
         const renderEvol = (fc, lvl) => {
             if (myId !== loadId || !active) return;
-            if (!fc?.features?.length) { if (map.getSource('taux-src')) map.getSource('taux-src').setData({ type: 'FeatureCollection', features: [] }); return; }
+            if (!fc?.features?.length) { if (map.getSource('taux-src')) map.getSource('taux-src').setData(EMPTY_FC); return; }
             const vals   = fc.features.map(f => +f.properties.delta).filter(v => isFinite(v));
             const breaks = computeBreaks(vals, 5);
             upsert(map, fc, stepExpr('delta', breaks, PAL_EVOL));
@@ -103,7 +103,7 @@ export function loadTaux(map) {
         if (myId !== loadId || !active) return;
         if (getLevel(map.getZoom()) !== renderLevel) return;
         if (!fc?.features?.length) {
-            if (map.getSource('taux-src')) map.getSource('taux-src').setData({ type: 'FeatureCollection', features: [] });
+            if (map.getSource('taux-src')) map.getSource('taux-src').setData(EMPTY_FC);
             return;
         }
         const breaks = computeBreaks(fc.features.map(f => +f.properties.valeur_affichee).filter(v => isFinite(v) && v > 0), 5);

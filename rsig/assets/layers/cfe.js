@@ -1,4 +1,4 @@
-import { showSpinner, hideSpinner, stepExpr, PAL, bddOnTop, apiFetch } from '../utils.js';
+import { showSpinner, hideSpinner, stepExpr, PAL, bddOnTop, apiFetch, EMPTY_FC } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
 
@@ -104,7 +104,7 @@ export function loadCfe(map) {
         if (myId !== loadId || !active) return;
         if (!fc?.features?.length) {
             if (map.getSource('cfe-src'))
-                map.getSource('cfe-src').setData({ type: 'FeatureCollection', features: [] });
+                map.getSource('cfe-src').setData(EMPTY_FC);
             return;
         }
         // Breaks stables : calculés une fois par cat+annee+level, jamais recalculés sur un pan
