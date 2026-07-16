@@ -60,7 +60,7 @@ function validateMillesime(string $m): string {
 }
 
 // ── Cache fichier JSON (TTL en secondes) ─────────────────────────────────────
-define('CACHE_DIR', __DIR__ . '/../../cache/');
+define('CACHE_DIR', __DIR__ . '/../cache/');
 
 function cacheGet(string $key): mixed {
     $f = CACHE_DIR . md5($key) . '.json';
