@@ -59,6 +59,13 @@ function validateMillesime(string $m): string {
     return (preg_match('/^\d{4}$/', $m) && (int)$m >= 2010 && (int)$m <= 2035) ? $m : '2025';
 }
 
+function isNotModified(string $etag): bool {
+    $inm = Flight::request()->getHeader('If-None-Match') ?? '';
+    // Nginx ajoute "-gzip" au suffix ETag lors de la compression — normaliser
+    $inm = preg_replace('/-gzip"$/', '"', $inm);
+    return $inm === $etag;
+}
+
 // ── Cache fichier JSON (TTL en secondes) ─────────────────────────────────────
 define('CACHE_DIR', __DIR__ . '/../cache/');
 

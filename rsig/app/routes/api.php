@@ -257,9 +257,7 @@ Flight::route('GET /api/crm/geojson', function () {
     $ttl      = $b ? 60 : 300;
     $etag     = '"' . md5($cacheKey) . '"';
 
-    if ((Flight::request()->getHeader('If-None-Match') ?? '') === $etag) {
-        http_response_code(304); return;
-    }
+    if (isNotModified($etag)) { http_response_code(304); return; }
 
     $cached = cacheGet($cacheKey);
     if ($cached !== null) {
@@ -1982,9 +1980,7 @@ Flight::route('GET /api/tarifs/departements', function () {
     $cacheKey = 'tarifs_dep_' . $cat . '_' . $annee;
     $etag     = '"' . md5($cacheKey) . '"';
 
-    if ((Flight::request()->getHeader('If-None-Match') ?? '') === $etag) {
-        http_response_code(304); return;
-    }
+    if (isNotModified($etag)) { http_response_code(304); return; }
 
     $cached = cacheGet($cacheKey);
     if ($cached !== null) {
