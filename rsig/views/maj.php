@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RSig — Mise à jour</title>
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=<?= ASSET_VER ?>">
     <style>
         /* ── Onglets principaux ── */
         .main-tabs { display:flex; gap:4px; border-bottom:3px solid var(--border); margin-bottom:24px; }

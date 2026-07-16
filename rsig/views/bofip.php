@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RSig — BOFIP</title>
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=<?= ASSET_VER ?>">
     <style>
         .main-tabs { display:flex; gap:4px; border-bottom:3px solid var(--border); margin-bottom:24px; }
         .main-tab  { padding:10px 20px; font-size:0.88rem; font-weight:700; cursor:pointer; color:var(--text3);

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RSig — Données</title>
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=<?= ASSET_VER ?>">
     <style>
         .tab-bar { display:flex; gap:4px; border-bottom:2px solid var(--border); margin-bottom:20px; }
         .tab { padding:8px 16px; font-size:0.85rem; font-weight:600; cursor:pointer; color:var(--text3); border:none; background:none; border-bottom:2px solid transparent; margin-bottom:-2px; transition:color .15s; }

@@ -8,8 +8,8 @@
     <link rel="preconnect" href="https://data.geopf.fr" crossorigin="">
     <link rel="preconnect" href="https://wxs.ign.fr" crossorigin="">
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css" crossorigin="">
-    <link rel="stylesheet" href="assets/style.css">
-    <link rel="modulepreload" href="assets/map.js">
+    <link rel="stylesheet" href="assets/style.css?v=<?= ASSET_VER ?>">
+    <link rel="modulepreload" href="assets/map.js?v=<?= ASSET_VER ?>">
     <style>
         body { opacity: 0; transition: opacity .15s; }
         body.ready { opacity: 1; }
@@ -616,7 +616,7 @@ kbd {
 </div>
 
 <script src="https://unpkg.com/maplibre-gl/dist/maplibre-gl.js" crossorigin=""></script>
-<script type="module" src="assets/map.js"></script>
+<script type="module" src="assets/map.js?v=<?= ASSET_VER ?>"></script>
 <script>
 // ── Recherche géocodage ──────────────────────────────────
 const HIST_KEY = 'rsig_search_history';
