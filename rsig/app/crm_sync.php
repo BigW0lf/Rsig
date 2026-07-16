@@ -33,6 +33,7 @@ function crmSync(PDO $db): array {
         account_id       TEXT,
         account_rtx_code TEXT,
         account_cp       TEXT,
+        account_siren    TEXT,
         auditeur         TEXT,
         produit          TEXT,
         phase            TEXT,
@@ -58,6 +59,8 @@ function crmSync(PDO $db): array {
     foreach (['crm_dossiers_geom_idx'=>'USING GIST(geom)', 'crm_dossiers_insee_idx'=>'(code_insee)'] as $idx => $def) {
         try { $db->exec("CREATE INDEX IF NOT EXISTS $idx ON crm_dossiers $def"); } catch (\Throwable) {}
     }
+    // Migrations colonnes manquantes (table existante avant ajout du champ)
+    try { $db->exec("ALTER TABLE crm_dossiers ADD COLUMN IF NOT EXISTS account_siren TEXT"); } catch (\Throwable) {}
 
     // ── Cache coords fallback depuis dossier_acc_geo ───────────────────────
     $existingCoords = [];

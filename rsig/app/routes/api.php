@@ -169,15 +169,16 @@ Flight::route('POST /api/crm/sync', function () {
 Flight::route('GET /api/crm/sync/status', function () {
     $db = getDb();
     if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
-    $row = $db->query("SELECT * FROM crm_sync_log ORDER BY id DESC LIMIT 1")->fetch();
-    $counts = $db->query("SELECT COUNT(*) FROM crm_sites_mirror")->fetchColumn();
-    $countd = $db->query("SELECT COUNT(*) FROM crm_dossiers")->fetchColumn();
-    $counta = $db->query("SELECT COUNT(*) FROM crm_accounts")->fetchColumn();
+    $row    = $db->query("SELECT * FROM crm_sync_log ORDER BY id DESC LIMIT 1")->fetch();
+    $hasDos = (int)$db->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name='crm_dossiers'")->fetchColumn();
+    $countd = $hasDos ? (int)$db->query("SELECT COUNT(*) FROM crm_dossiers")->fetchColumn() : 0;
+    $hasAcc = (int)$db->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name='crm_accounts'")->fetchColumn();
+    $counta = $hasAcc ? (int)$db->query("SELECT COUNT(*) FROM crm_accounts")->fetchColumn() : 0;
     Flight::json([
         'last_sync'      => $row ?: null,
-        'sites_in_db'    => (int)$counts,
-        'dossiers_in_db' => (int)$countd,
-        'accounts_in_db' => (int)$counta,
+        'sites_in_db'    => $countd,
+        'dossiers_in_db' => $countd,
+        'accounts_in_db' => $counta,
     ]);
 });
 

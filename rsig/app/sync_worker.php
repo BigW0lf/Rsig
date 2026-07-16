@@ -31,7 +31,7 @@ try {
        ]);
     // Invalider le cache GeoJSON CRM après sync réussie
     foreach (['crm_geojson_main', 'crm_geojson_fallback'] as $k) {
-        @unlink(sys_get_temp_dir() . '/rsig_cache/' . $k . '.json');
+        @unlink(CACHE_DIR . md5($k) . '.json');
     }
 } catch (\Throwable $e) {
     $db->prepare("UPDATE crm_sync_log SET finished_at=now(), status='error', message=:m WHERE id=:id")

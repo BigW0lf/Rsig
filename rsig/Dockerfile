@@ -11,6 +11,7 @@ RUN a2enmod rewrite deflate headers \
 
 COPY . /var/www/html/
 
-RUN chown -R www-data:www-data /var/www/html
+RUN mkdir -p /var/www/html/cache \
+    && chown -R www-data:www-data /var/www/html
 
 EXPOSE 80
