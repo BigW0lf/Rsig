@@ -4,8 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RSig — Carte</title>
+    <link rel="preconnect" href="https://unpkg.com" crossorigin="">
+    <link rel="preconnect" href="https://data.geopf.fr" crossorigin="">
+    <link rel="preconnect" href="https://wxs.ign.fr" crossorigin="">
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css" crossorigin="">
     <link rel="stylesheet" href="assets/style.css">
+    <link rel="modulepreload" href="assets/map.js">
     <style>
         body { opacity: 0; transition: opacity .15s; }
         body.ready { opacity: 1; }

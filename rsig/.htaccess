@@ -2,3 +2,17 @@ RewriteEngine On
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^(.*)$ index.php [QSA,L]
+
+# Cache navigateur sur les assets statiques (JS/CSS/images)
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType application/javascript  "access plus 7 days"
+    ExpiresByType text/css               "access plus 7 days"
+    ExpiresByType image/png              "access plus 30 days"
+    ExpiresByType image/svg+xml          "access plus 30 days"
+</IfModule>
+<IfModule mod_headers.c>
+    <FilesMatch "\.(js|css|png|svg)$">
+        Header set Cache-Control "public, max-age=604800, stale-while-revalidate=86400"
+    </FilesMatch>
+</IfModule>
