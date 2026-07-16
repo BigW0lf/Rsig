@@ -1,6 +1,112 @@
 <?php
 require_once __DIR__ . '/../crm_sync.php';
 
+// ── Fonctions utilitaires BOFIP (globales, pas dans des closures) ─────────────
+function bofipCircFromHeader(string $h): ?int {
+    $h = strtolower(iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$h));
+    if (preg_match('/premi|1.?re?|1ère/', $h)) return 1;
+    if (preg_match('/deuxi|2.?me/', $h))       return 2;
+    if (preg_match('/troisi|3.?me/', $h))       return 3;
+    if (preg_match('/quatri|4.?me/', $h))       return 4;
+    return null;
+}
+function bofipParseTarif(string $s): ?float {
+    $s = preg_replace('/[^\d,.]/', '', $s);
+    $s = str_replace(',', '.', $s);
+    return is_numeric($s) ? (float)$s : null;
+}
+function bofipIsPaca(string $caption): bool {
+    $c = strtolower(iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$caption));
+    return str_contains($c,'bouches') || str_contains($c,'paca') || str_contains($c,'var') || str_contains($c,'provence');
+}
+function bofipIs2bis(string $caption): bool {
+    $c = strtolower(iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$caption));
+    return str_contains($c,'reduction') || str_contains($c,'reduit') || str_contains($c,'10 %') || str_contains($c,'derog');
+}
+function bofipNormStr(string $s): string {
+    $s = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $s);
+    return strtolower(preg_replace('/[\W_]+/', ' ', $s));
+}
+function bofipExtractDep(string $txt): ?string {
+    if (preg_match('/d[ée]partement\s+(?:de\s+la\s+|du\s+|des\s+|de\s+l[\'´`\x{2019}]\s*|de\s+)(.+)/ui', $txt, $m))
+        return trim(rtrim(trim($m[1]), ':'));
+    return null;
+}
+function bofipExtractComs(string $fullTxt): array {
+    $colonPos = strpos($fullTxt, ':');
+    if ($colonPos === false) return [];
+    $rest = trim(substr($fullTxt, $colonPos + 1));
+    $rest = rtrim($rest, '; .\xc2\xa0');
+    $rest = preg_replace('/\s+et\s+/ui', ',', $rest);
+    $rest = preg_replace('/\xc2\xa0/', ' ', $rest);
+    return array_values(array_filter(array_map('trim', explode(',', $rest))));
+}
+
+function bofipParse(string $url): array|false {
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 15,
+        'user_agent'    => 'Mozilla/5.0 (compatible; RSig/1.0)',
+        'ignore_errors' => true,
+    ]]);
+    $html = @file_get_contents($url, false, $ctx);
+    if (!$html) return false;
+    if (mb_detect_encoding($html, 'UTF-8', true) === false)
+        $html = mb_convert_encoding($html, 'UTF-8', 'ISO-8859-1');
+
+    $doc = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
+    libxml_clear_errors();
+    $xpath = new DOMXPath($doc);
+
+    $result = ['tables' => [], 'listes' => [], 'titre' => '', 'millesime' => null];
+
+    $titres = $xpath->query('//h1 | //h2');
+    if ($titres->length > 0) $result['titre'] = trim(preg_replace('/\s+/', ' ', $titres->item(0)->textContent));
+
+    foreach ($xpath->query('//table') as $table) {
+        $headers = []; $rows = [];
+        $captionNodes = $xpath->query('.//caption', $table);
+        $caption = $captionNodes->length > 0
+            ? trim(preg_replace('/\s+/', ' ', $captionNodes->item(0)->textContent)) : '';
+        foreach ($xpath->query('.//thead/tr/th | .//tr[1]/th', $table) as $th)
+            $headers[] = trim(preg_replace('/\s+/', ' ', $th->textContent));
+        foreach ($xpath->query('.//tbody/tr | .//tr[position()>1]', $table) as $tr) {
+            $cells = [];
+            foreach ($xpath->query('.//td | .//th', $tr) as $td)
+                $cells[] = trim(preg_replace('/\s+/', ' ', $td->textContent));
+            if (array_filter($cells)) $rows[] = $cells;
+        }
+        if ($headers && $rows) $result['tables'][] = ['caption' => $caption, 'headers' => $headers, 'rows' => $rows];
+    }
+
+    $communes = [];
+    foreach ($xpath->query('//p[.//strong]|//li[.//strong]') as $node) {
+        $strong = $xpath->query('.//strong', $node)->item(0);
+        if (!$strong) continue;
+        $depTxt = trim(preg_replace('/\s+/', ' ', $strong->textContent));
+        if (!preg_match('/d[ée]partement/ui', $depTxt)) continue;
+        $dep = bofipExtractDep($depTxt);
+        if (!$dep) continue;
+        $coms = bofipExtractComs(trim(preg_replace('/\s+/', ' ', $node->textContent)));
+        if ($coms) $communes[$dep] = $coms;
+    }
+    if (!$communes) {
+        foreach ($xpath->query('//p[not(.//strong)]') as $p) {
+            $txt = trim(preg_replace('/\s+/', ' ', $p->textContent));
+            if (!preg_match('/dans\s+le\s+d[ée]partement/ui', $txt)) continue;
+            $dep = bofipExtractDep($txt);
+            if (!$dep) continue;
+            $coms = bofipExtractComs($txt);
+            if ($coms) $communes[$dep] = $coms;
+        }
+    }
+    if ($communes) $result['listes'] = $communes;
+    if (preg_match('/(\d{8})$/', $url, $m)) $result['millesime'] = substr($m[1], 0, 4);
+
+    return $result;
+}
+
 // ── Statut BDD (admin) ───────────────────────────────────────────────────────
 Flight::route('GET /api/db/status', function () {
     requireAdmin();
@@ -1435,33 +1541,10 @@ Flight::route('POST /api/tsb/tarifs/import', function () {
         Flight::json(['error' => 'Millésime invalide'], 400); return;
     }
 
-    // Parser via notre route BOFIP
-    $parsed = @json_decode(file_get_contents('http://localhost/api/bofip/parse?url=' . urlencode($url)), true);
-    if (!$parsed || empty($parsed['tables'])) {
+    // Parser via la fonction directe (pas d'appel HTTP interne)
+    $parsed = bofipParse($url);
+    if ($parsed === false || empty($parsed['tables'])) {
         Flight::json(['error' => 'Aucun tableau trouvé sur cette page'], 422); return;
-    }
-
-    // Mapping en-tête → circ
-    function circFromHeader(string $h): ?int {
-        $h = strtolower(iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$h));
-        if (preg_match('/premi|1.?re?|1ère/', $h)) return 1;
-        if (preg_match('/deuxi|2.?me/', $h))      return 2;
-        if (preg_match('/troisi|3.?me/', $h))      return 3;
-        if (preg_match('/quatri|4.?me/', $h))      return 4;
-        return null;
-    }
-    function parseTarif(string $s): ?float {
-        $s = preg_replace('/[^\d,.]/', '', $s);
-        $s = str_replace(',', '.', $s);
-        return is_numeric($s) ? (float)$s : null;
-    }
-    function isPaca(string $caption): bool {
-        $c = strtolower(iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$caption));
-        return str_contains($c,'bouches') || str_contains($c,'paca') || str_contains($c,'var') || str_contains($c,'provence');
-    }
-    function is2bis(string $caption): bool {
-        $c = strtolower(iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$caption));
-        return str_contains($c,'reduction') || str_contains($c,'reduit') || str_contains($c,'10 %') || str_contains($c,'derog');
     }
 
     $inserted = 0;
@@ -1478,36 +1561,34 @@ Flight::route('POST /api/tsb/tarifs/import', function () {
         $caption  = $tbl['caption'] ?? '';
 
         // Filtrer les lignes sans tarif
-        $dataRows = array_filter($rows, fn($r) => count($r) > 1 && parseTarif($r[1] ?? '') !== null);
+        $dataRows = array_filter($rows, fn($r) => count($r) > 1 && bofipParseTarif($r[1] ?? '') !== null);
         if (empty($dataRows)) continue;
 
-        if (isPaca($caption)) {
+        if (bofipIsPaca($caption)) {
             $region = 'PACA'; $circ = null;
             foreach ($dataRows as $row) {
-                $t = parseTarif($row[1] ?? '');
+                $t = bofipParseTarif($row[1] ?? '');
                 if ($t === null) continue;
                 $stmt->execute([':mil'=>$millesime,':reg'=>$region,':circ'=>$circ,':type'=>trim($row[0]),':tarif'=>$t,':url'=>$url]);
                 $inserted++;
             }
-        } elseif (is2bis($caption)) {
+        } elseif (bofipIs2bis($caption)) {
             $region = 'IDF_2BIS'; $circ = 2;
             foreach ($dataRows as $row) {
-                $t = parseTarif($row[1] ?? '');
+                $t = bofipParseTarif($row[1] ?? '');
                 if ($t === null) continue;
                 $stmt->execute([':mil'=>$millesime,':reg'=>$region,':circ'=>$circ,':type'=>trim($row[0]),':tarif'=>$t,':url'=>$url]);
                 $inserted++;
             }
         } else {
-            // IDF principale : colonnes → circs
             $circCols = [];
             foreach ($headers as $ci => $h) {
-                $c = circFromHeader($h);
+                $c = bofipCircFromHeader($h);
                 if ($c) $circCols[$ci] = $c;
             }
-            // Fallback : chercher dans la première ligne de données si headers sans circ
             if (empty($circCols) && !empty($rows[0])) {
                 foreach ($rows[0] as $ci => $cell) {
-                    $c = circFromHeader((string)$cell);
+                    $c = bofipCircFromHeader((string)$cell);
                     if ($c) $circCols[$ci] = $c;
                 }
                 $dataRows = array_slice(array_values($dataRows), 1);
@@ -1517,7 +1598,7 @@ Flight::route('POST /api/tsb/tarifs/import', function () {
                 $type = trim($row[0] ?? '');
                 if (!$type) continue;
                 foreach ($circCols as $ci => $c) {
-                    $t = parseTarif($row[$ci] ?? '');
+                    $t = bofipParseTarif($row[$ci] ?? '');
                     if ($t === null) continue;
                     $stmt->execute([':mil'=>$millesime,':reg'=>'IDF',':circ'=>$c,':type'=>$type,':tarif'=>$t,':url'=>$url]);
                     $inserted++;
@@ -1565,10 +1646,9 @@ Flight::route('POST /api/tsb/import', function () {
         Flight::json(['error' => 'Millésime invalide'], 400); return;
     }
 
-    // Parser le BOFIP via notre route existante
-    $parseUrl = 'http://localhost/api/bofip/parse?url=' . urlencode($url);
-    $parsed = @json_decode(file_get_contents($parseUrl), true);
-    if (!$parsed || empty($parsed['listes'])) {
+    // Parser le BOFIP directement (pas d'appel HTTP interne)
+    $parsed = bofipParse($url);
+    if ($parsed === false || empty($parsed['listes'])) {
         Flight::json(['error' => 'Aucune liste de communes trouvée sur cette page'], 422); return;
     }
 
@@ -1576,20 +1656,14 @@ Flight::route('POST /api/tsb/import', function () {
     $nbDeps = count($listes);
     $nbComs = array_sum(array_map('count', $listes));
 
-    // Normaliser les noms de communes → codes INSEE
-    function normStr(string $s): string {
-        $s = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $s);
-        return strtolower(preg_replace('/[\W_]+/', ' ', $s));
-    }
-
     $stmt = $db->query("SELECT insee, nom FROM communes_geom WHERE LEFT(insee,2) IN ('77','78','91','92','93','94','95')");
     $idxNom = [];
-    foreach ($stmt as $row) $idxNom[normStr($row['nom'])] = $row['insee'];
+    foreach ($stmt as $row) $idxNom[bofipNormStr($row['nom'])] = $row['insee'];
 
     $dcsucs = [];
     foreach ($listes as $depNom => $noms) {
         foreach ($noms as $nom) {
-            $n = normStr($nom);
+            $n = bofipNormStr($nom);
             if (isset($idxNom[$n])) {
                 $dcsucs[] = $idxNom[$n];
             } else {
@@ -1912,105 +1986,8 @@ Flight::route('GET /api/bofip/parse', function () {
     if (!filter_var($url, FILTER_VALIDATE_URL) || !str_contains($url, 'bofip.impots.gouv.fr')) {
         Flight::json(['error' => 'URL invalide'], 400); return;
     }
-
-    $ctx = stream_context_create(['http' => [
-        'timeout'       => 15,
-        'user_agent'    => 'Mozilla/5.0 (compatible; RSig/1.0)',
-        'ignore_errors' => true,
-    ]]);
-    $html = @file_get_contents($url, false, $ctx);
-    if (!$html) { Flight::json(['error' => 'Impossible de charger la page BOFIP'], 502); return; }
-
-    if (mb_detect_encoding($html, 'UTF-8', true) === false) {
-        $html = mb_convert_encoding($html, 'UTF-8', 'ISO-8859-1');
-    }
-
-    $doc = new DOMDocument();
-    libxml_use_internal_errors(true);
-    $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
-    libxml_clear_errors();
-    $xpath = new DOMXPath($doc);
-
-    $result = ['tables' => [], 'listes' => [], 'titre' => '', 'millesime' => null];
-
-    // Titre
-    $titres = $xpath->query('//h1 | //h2');
-    if ($titres->length > 0) $result['titre'] = trim(preg_replace('/\s+/', ' ', $titres->item(0)->textContent));
-
-    // ── Tables : tarifs ──────────────────────────────────
-    foreach ($xpath->query('//table') as $table) {
-        $headers = [];
-        $rows    = [];
-        // Caption de la table
-        $captionNodes = $xpath->query('.//caption', $table);
-        $caption = $captionNodes->length > 0
-            ? trim(preg_replace('/\s+/', ' ', $captionNodes->item(0)->textContent))
-            : '';
-        foreach ($xpath->query('.//thead/tr/th | .//tr[1]/th', $table) as $th) {
-            $headers[] = trim(preg_replace('/\s+/', ' ', $th->textContent));
-        }
-        foreach ($xpath->query('.//tbody/tr | .//tr[position()>1]', $table) as $tr) {
-            $cells = [];
-            foreach ($xpath->query('.//td | .//th', $tr) as $td) {
-                $cells[] = trim(preg_replace('/\s+/', ' ', $td->textContent));
-            }
-            if (array_filter($cells)) $rows[] = $cells;
-        }
-        if ($headers && $rows) $result['tables'][] = ['caption' => $caption, 'headers' => $headers, 'rows' => $rows];
-    }
-
-    // ── Listes : communes DCSUCS ─────────────────────────
-    // 3 formats selon la version BOFIP :
-    //   A) <p>[.//strong] — "dans le département de X" en <strong> (2015-2022)
-    //   B) <li>[.//strong] — même contenu dans <li> (2023+)
-    //   C) <p> sans <strong> — "- dans le département de X : com1, com2" (2014)
-    $communes = [];
-
-    function extractDep(string $txt): ?string {
-        if (preg_match('/d[ée]partement\s+(?:de\s+la\s+|du\s+|des\s+|de\s+l[\'´`\x{2019}]\s*|de\s+)(.+)/ui', $txt, $m))
-            return trim(rtrim(trim($m[1]), ':'));
-        return null;
-    }
-    function extractComs(string $fullTxt): array {
-        $colonPos = strpos($fullTxt, ':');
-        if ($colonPos === false) return [];
-        $rest = trim(substr($fullTxt, $colonPos + 1));
-        $rest = rtrim($rest, '; .\xc2\xa0');
-        $rest = preg_replace('/\s+et\s+/ui', ',', $rest);
-        $rest = preg_replace('/\xc2\xa0/', ' ', $rest); // nbsp
-        return array_values(array_filter(array_map('trim', explode(',', $rest))));
-    }
-
-    // Formats A et B : nœuds <p> ou <li> contenant un <strong> avec "département"
-    foreach ($xpath->query('//p[.//strong]|//li[.//strong]') as $node) {
-        $strong = $xpath->query('.//strong', $node)->item(0);
-        if (!$strong) continue;
-        $depTxt = trim(preg_replace('/\s+/', ' ', $strong->textContent));
-        if (!preg_match('/d[ée]partement/ui', $depTxt)) continue;
-        $dep = extractDep($depTxt);
-        if (!$dep) continue;
-        $fullTxt = trim(preg_replace('/\s+/', ' ', $node->textContent));
-        $coms = extractComs($fullTxt);
-        if ($coms) $communes[$dep] = $coms;
-    }
-
-    // Format C : <p> sans <strong> contenant "dans le département de"
-    if (!$communes) {
-        foreach ($xpath->query('//p[not(.//strong)]') as $p) {
-            $txt = trim(preg_replace('/\s+/', ' ', $p->textContent));
-            if (!preg_match('/dans\s+le\s+d[ée]partement/ui', $txt)) continue;
-            $dep = extractDep($txt);
-            if (!$dep) continue;
-            $coms = extractComs($txt);
-            if ($coms) $communes[$dep] = $coms;
-        }
-    }
-
-    if ($communes) $result['listes'] = $communes;
-
-    // Millésime depuis l'URL
-    if (preg_match('/(\d{8})$/', $url, $m)) $result['millesime'] = substr($m[1], 0, 4);
-
+    $result = bofipParse($url);
+    if ($result === false) { Flight::json(['error' => 'Impossible de charger la page BOFIP'], 502); return; }
     Flight::json($result);
 });
 
