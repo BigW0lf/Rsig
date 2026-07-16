@@ -1,9 +1,9 @@
-import { showSpinner, hideSpinner, EMPTY_FC } from './utils.js';
+import { showSpinner, hideSpinner } from './utils.js';
 import { isMeasuring } from './measure.js';
 import { hasVisibleLayer } from './catalogue.js';
 
 // ── Cache millésimes ortho par département ────────────────────────────────────
-const _orthoCache = {}; // campagne → { code_dep: annee_acq }
+const _orthoCache = {};
 
 async function getOrthoAnnee(codeDep) {
     const sel = document.getElementById('ign-campagne-ctrl');
@@ -62,30 +62,27 @@ function featureProps(type, props) {
     }
 }
 
-const typeNames = {
-    departements: 'LIMITES_ADMINISTRATIVES_EXPRESS.LATEST:departement',
-    communes:     'CADASTRALPARCELS.PARCELLAIRE_EXPRESS:commune',
-    sections:     'CADASTRALPARCELS.PARCELLAIRE_EXPRESS:feuille',
-    parcelles:    'CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle',
-};
-const maxFeat = { departements: 150, communes: 500, sections: 400, parcelles: 600 };
-const style   = {
+const style = {
     departements: { fill: '#003189', opacity: 0.05, line: '#003189', lw: 1   },
     communes:     { fill: '#7a8fbb', opacity: 0.04, line: '#7a8fbb', lw: 0.5 },
     sections:     { fill: '#ede9fe', opacity: 0.08, line: '#5b21b6', lw: 1   },
     parcelles:    { fill: '#fef3c7', opacity: 0.10, line: '#b45309', lw: 1   },
 };
-const labelField = {
-    sections:  ['get', 'section'],
-    parcelles: ['get', 'numero'],
-};
 
-let ctrl      = null;
-let lastType  = null;
-let lastBbox  = null;
-let lastFetch = 0;
-const MAX_CACHE_AGE = 5 * 60 * 1000; // 5 minutes
+// ── IGN TMS vector tiles ──────────────────────────────────────────────────────
+// Cadastral Express — communes (z9-13), sections/feuilles (z13-15), parcelles (z15+)
+const IGN_TMS = 'https://data.geopf.fr/tms/1.0.0/CADASTRALPARCELS.PARCELLAIRE_EXPRESS@EPSG:3857/{z}/{x}/{y}.pbf';
 
+// source-layer dans le PBF → clé interne
+const SRC_LAYER_TO_TYPE = { commune: 'communes', feuille: 'sections', parcelle: 'parcelles' };
+
+const CADASTRAL_LAYERS = [
+    { type: 'communes',  srcLayer: 'commune',  minzoom:  9, maxzoom: 13, label: null },
+    { type: 'sections',  srcLayer: 'feuille',  minzoom: 13, maxzoom: 15, label: ['get', 'section'] },
+    { type: 'parcelles', srcLayer: 'parcelle', minzoom: 15, maxzoom: 22, label: ['get', 'numero'] },
+];
+
+// Compatibilité avec les rares endroits qui appelaient getWfsType()
 export function getWfsType(zoom) {
     if (zoom < 9)  return 'departements';
     if (zoom < 13) return 'communes';
@@ -93,112 +90,100 @@ export function getWfsType(zoom) {
     return 'parcelles';
 }
 
-// Seuil minimal de déplacement pour déclencher un rechargement WFS (en degrés)
-// Évite les requêtes inutiles sur les micro-pans
-const MIN_DELTA = { departements: 999, communes: 0.1, sections: 0.04, parcelles: 0.01 };
+// ── Initialisation (appelée une seule fois sur map.load, puis no-op) ──────────
+let _initialized = false;
 
 export function updateWfs(map) {
-    const zoom = map.getZoom();
-    const type = getWfsType(zoom);
-    const b    = map.getBounds();
-    const bbox = `${b.getWest().toFixed(4)},${b.getSouth().toFixed(4)},${b.getEast().toFixed(4)},${b.getNorth().toFixed(4)}`;
+    if (_initialized) return;
+    _initialized = true;
 
-    const now = performance.now();
-    const cacheExpired = (now - lastFetch) > MAX_CACHE_AGE;
+    // 1. Tuiles vectorielles IGN : communes, sections, parcelles
+    map.addSource('ign-cadastral', {
+        type: 'vector',
+        tiles: [IGN_TMS],
+        minzoom: 6,
+        maxzoom: 20,
+        attribution: '© IGN — Parcellaire Express',
+    });
 
-    if (type === 'departements') {
-        if (lastType === 'departements' && !cacheExpired) return;
-        lastBbox = null;
-    } else {
-        if (type === lastType && lastBbox && !cacheExpired) {
-            // Comparer les centres — ne recharger que si déplacement > seuil
-            const prev = lastBbox.split(',').map(Number);
-            const cur  = bbox.split(',').map(Number);
-            const dLng = Math.abs(((prev[0] + prev[2]) / 2) - ((cur[0] + cur[2]) / 2));
-            const dLat = Math.abs(((prev[1] + prev[3]) / 2) - ((cur[1] + cur[3]) / 2));
-            if (dLng < MIN_DELTA[type] && dLat < MIN_DELTA[type]) return;
-        }
-    }
-    lastType  = type;
-    lastBbox  = bbox;
-    lastFetch = now;
-
-    if (ctrl) ctrl.abort();
-    ctrl = new AbortController();
-    showSpinner();
-
-    // Départements : proxy local PG (cache 24h, ~200KB) au lieu d'IGN WFS (33MB, externe)
-    const fetchUrl = type === 'departements'
-        ? '/api/wfs/departements'
-        : 'https://data.geopf.fr/wfs/ows?' + new URLSearchParams({
-            SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature',
-            TYPENAMES: typeNames[type], SRSNAME: 'EPSG:4326',
-            BBOX: bbox + ',EPSG:4326',
-            OUTPUTFORMAT: 'application/json', COUNT: maxFeat[type],
-        });
-
-    fetch(fetchUrl, { signal: ctrl.signal })
-    .then(r => { if (!r.ok) throw new Error('WFS ' + r.status); return r.text(); })
-    .then(text => {
-        let data;
-        try { data = JSON.parse(text); }
-        catch {
-            const cut = text.lastIndexOf(',{"type":"Feature"');
-            if (cut > 0) {
-                try { data = JSON.parse(text.slice(0, cut) + ']}'); }
-                catch { hideSpinner(); return; }
-            } else { hideSpinner(); return; }
-        }
-        if (!data?.features) { hideSpinner(); return; }
-
+    for (const { type, srcLayer, minzoom, maxzoom, label } of CADASTRAL_LAYERS) {
         const s = style[type];
-        if (map.getSource('wfs-src')) {
-            map.getSource('wfs-src').setData(data);
-            map.setPaintProperty('wfs-fill', 'fill-color',   s.fill);
-            map.setPaintProperty('wfs-fill', 'fill-opacity', s.opacity);
-            map.setPaintProperty('wfs-line', 'line-color',   s.line);
-            map.setPaintProperty('wfs-line', 'line-width',   s.lw);
-        } else {
-            map.addSource('wfs-src', { type: 'geojson', data });
-            map.addLayer({ id: 'wfs-fill', type: 'fill', source: 'wfs-src',
-                paint: { 'fill-color': s.fill, 'fill-opacity': s.opacity } });
-            map.addLayer({ id: 'wfs-line', type: 'line', source: 'wfs-src',
-                paint: { 'line-color': s.line, 'line-width': s.lw } });
-            map.addLayer({ id: 'wfs-labels', type: 'symbol', source: 'wfs-src',
+        map.addLayer({
+            id: `wfs-${type}-fill`, type: 'fill',
+            source: 'ign-cadastral', 'source-layer': srcLayer,
+            minzoom, maxzoom,
+            paint: { 'fill-color': s.fill, 'fill-opacity': s.opacity },
+        });
+        map.addLayer({
+            id: `wfs-${type}-line`, type: 'line',
+            source: 'ign-cadastral', 'source-layer': srcLayer,
+            minzoom, maxzoom,
+            paint: { 'line-color': s.line, 'line-width': s.lw },
+        });
+        if (label) {
+            map.addLayer({
+                id: `wfs-${type}-labels`, type: 'symbol',
+                source: 'ign-cadastral', 'source-layer': srcLayer,
+                minzoom, maxzoom,
                 layout: {
-                    'text-field': ['literal', ''], 'text-size': 10,
-                    'text-font': ['Noto Sans Regular'], 'text-max-width': 8,
+                    'text-field': label,
+                    'text-size': 10,
+                    'text-font': ['Noto Sans Regular'],
+                    'text-max-width': 8,
                     'text-allow-overlap': false,
                 },
-                paint: { 'text-color': '#1a2332', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5, 'text-opacity': 0.8 }
+                paint: {
+                    'text-color': '#1a2332',
+                    'text-halo-color': '#ffffff',
+                    'text-halo-width': 1.5,
+                    'text-opacity': 0.8,
+                },
             });
         }
-        const lf = labelField[type] ?? null;
-        map.setLayoutProperty('wfs-labels', 'visibility', lf ? 'visible' : 'none');
-        if (lf) map.setLayoutProperty('wfs-labels', 'text-field', lf);
+    }
 
-        hideSpinner();
-    })
-    .catch(err => { hideSpinner(); if (err.name !== 'AbortError') console.error('WFS:', err); });
+    // 2. Départements : GeoJSON proxy local (cache 24h, ~200 KB)
+    _fetchDept(map);
 }
 
-// ── Clic + hover sur les features WFS ────────────────────────────────────────
+function _fetchDept(map) {
+    showSpinner();
+    fetch('/api/wfs/departements')
+        .then(r => { if (!r.ok) throw new Error('dept ' + r.status); return r.json(); })
+        .then(data => {
+            hideSpinner();
+            if (!data?.features) return;
+            const s = style.departements;
+            map.addSource('wfs-dept-src', { type: 'geojson', data });
+            map.addLayer({
+                id: 'wfs-dept-fill', type: 'fill', source: 'wfs-dept-src',
+                maxzoom: 9,
+                paint: { 'fill-color': s.fill, 'fill-opacity': s.opacity },
+            });
+            map.addLayer({
+                id: 'wfs-dept-line', type: 'line', source: 'wfs-dept-src',
+                maxzoom: 9,
+                paint: { 'line-color': s.line, 'line-width': s.lw },
+            });
+        })
+        .catch(() => hideSpinner());
+}
+
+// ── Clic + hover ──────────────────────────────────────────────────────────────
 export function initWfsClick(map) {
     let _popup = null;
 
-    map.on('click', 'wfs-fill', async (e) => {
+    async function handleClick(e, type) {
         if (isMeasuring()) return;
         if (hasVisibleLayer()) return;
-        // Ne pas afficher le popup cadastral si un POI OSM est au même point
         if (map.queryRenderedFeatures(e.point, { layers: ['osm-point'] }).length) return;
+
         const f = e.features?.[0];
         if (!f) return;
-
-        const type  = lastType;
         const props = f.properties;
-        const rows  = featureProps(type, props).filter(([, v]) => v != null && v !== '');
 
-        // Infos ortho uniquement en mode satellite (osm-tiles masqué)
+        const rows = featureProps(type, props).filter(([, v]) => v != null && v !== '');
+
         const isSat = map.getLayoutProperty('osm-tiles', 'visibility') !== 'visible';
         let orthoHtml = '';
         if (isSat) {
@@ -232,21 +217,21 @@ export function initWfsClick(map) {
 
         if (_popup) _popup.remove();
         _popup = new maplibregl.Popup({ closeButton: true, maxWidth: '260px' })
-            .setLngLat(e.lngLat)
-            .setHTML(html)
-            .addTo(map);
-    });
+            .setLngLat(e.lngLat).setHTML(html).addTo(map);
+    }
 
-    // Fermer le popup WFS si l'utilisateur bascule le fond de carte
+    // Enregistrement des handlers — MapLibre les mémorise même si la couche n'existe pas encore
+    map.on('click', 'wfs-dept-fill',      e => handleClick(e, 'departements'));
+    map.on('click', 'wfs-communes-fill',  e => handleClick(e, 'communes'));
+    map.on('click', 'wfs-sections-fill',  e => handleClick(e, 'sections'));
+    map.on('click', 'wfs-parcelles-fill', e => handleClick(e, 'parcelles'));
+
     map.on('layoutproperty', () => {
         if (_popup) { _popup.remove(); _popup = null; }
     });
 
-    map.on('mouseenter', 'wfs-fill', () => {
-        map.getCanvas().style.cursor = 'pointer';
-    });
-
-    map.on('mouseleave', 'wfs-fill', () => {
-        map.getCanvas().style.cursor = '';
-    });
+    for (const id of ['wfs-dept-fill', 'wfs-communes-fill', 'wfs-sections-fill', 'wfs-parcelles-fill']) {
+        map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', id, () => { map.getCanvas().style.cursor = '';        });
+    }
 }

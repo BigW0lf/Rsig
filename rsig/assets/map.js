@@ -249,7 +249,6 @@ map.on('load', () => {
     });
 
     map.on('moveend', debounce(() => {
-        updateWfs(map);
         if (taux.isActive())     taux.load();
         if (coeff.isActive())    coeff.load();
         if (tarifs.isActive())   tarifs.load();
@@ -266,6 +265,7 @@ map.on('load', () => {
         if (osm.isActive()) osm.load();
     }, 1200));
 
+    // Initialise les couches vectorielles IGN + dept GeoJSON (no-op sur les moveend suivants)
     updateWfs(map);
 
     // ── Restaurer l'état (hash URL > localStorage) ───────
