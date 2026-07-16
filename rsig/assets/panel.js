@@ -1,3 +1,5 @@
+import { isHidden } from './catalogue.js';
+
 const panelRight = document.getElementById('panel-right');
 const _legendEl  = document.getElementById('legend');
 
@@ -17,7 +19,7 @@ const _sections = {};
 
 function _renderPanel() {
     const keys = ['taux', 'tarifs', 'coeff', 'cfe', 'tf', 'ta', 'ta-majore', 'sections', 'tsb', 'tass', 'zfu', 'dossiers', 'prospects', 'osm'];
-    const active = keys.filter(k => _sections[k]);
+    const active = keys.filter(k => _sections[k] && !isHidden(k));
     if (!active.length) { panelRight.classList.add('panel-closed'); return; }
     const first = _sections[active[0]];
     document.getElementById('info-title').textContent = first.title;

@@ -1,6 +1,7 @@
 import { showSpinner, hideSpinner, stepExpr, PAL, bddOnTop, apiFetch, EMPTY_FC } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
+import { isHidden } from '../catalogue.js';
 
 let active = false;
 let abortCtrl = null;
@@ -52,9 +53,12 @@ function quantileBreaks(values, n) {
 }
 
 function upsert(map, fc, color) {
+    const vis = isHidden('cfe') ? 'none' : 'visible';
     if (map.getLayer('cfe-fill')) {
         map.getSource('cfe-src').setData(fc);
         map.setPaintProperty('cfe-fill', 'fill-color', color);
+        map.setLayoutProperty('cfe-fill', 'visibility', vis);
+        map.setLayoutProperty('cfe-line', 'visibility', vis);
     } else {
         if (map.getSource('cfe-src')) {
             ['cfe-fill', 'cfe-line'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
@@ -62,8 +66,10 @@ function upsert(map, fc, color) {
         }
         map.addSource('cfe-src', { type: 'geojson', data: fc });
         map.addLayer({ id: 'cfe-fill', type: 'fill', source: 'cfe-src',
+            layout: { visibility: vis },
             paint: { 'fill-color': color, 'fill-opacity': 0.45 } });
         map.addLayer({ id: 'cfe-line', type: 'line', source: 'cfe-src',
+            layout: { visibility: vis },
             paint: { 'line-color': '#444', 'line-width': 0.5 } });
     }
     bddOnTop(map);

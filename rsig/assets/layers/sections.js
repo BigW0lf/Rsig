@@ -1,6 +1,7 @@
 import { showSpinner, hideSpinner, PAL, bddOnTop, apiFetch, EMPTY_FC } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
+import { isHidden } from '../catalogue.js';
 
 let active = false;
 let abortCtrl = null;
@@ -52,9 +53,11 @@ function getLevel(zoom) {
 // prop : 'secteur' pour le niveau section, 'secteur_dom' pour commune/dept
 function upsert(map, fc, propKey) {
     const color = secteurColorExpr(propKey);
+    const vis   = isHidden('sections') ? 'none' : 'visible';
     if (map.getLayer('sections-fill')) {
         map.getSource('sections-src').setData(fc);
         map.setPaintProperty('sections-fill', 'fill-color', color);
+        map.setLayoutProperty('sections-fill', 'visibility', vis);
     } else {
         if (map.getSource('sections-src')) {
             if (map.getLayer('sections-fill')) map.removeLayer('sections-fill');
@@ -62,6 +65,7 @@ function upsert(map, fc, propKey) {
         }
         map.addSource('sections-src', { type: 'geojson', data: fc });
         map.addLayer({ id: 'sections-fill', type: 'fill', source: 'sections-src',
+            layout: { visibility: vis },
             paint: { 'fill-color': color, 'fill-opacity': 0.5, 'fill-outline-color': '#000000' } });
         map.on('mouseenter', 'sections-fill', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'sections-fill', () => map.getCanvas().style.cursor = '');

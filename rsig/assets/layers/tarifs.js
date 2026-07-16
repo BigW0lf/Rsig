@@ -1,6 +1,7 @@
 import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop, apiFetch, EMPTY_FC } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
+import { isHidden } from '../catalogue.js';
 
 let active    = false;
 let abortCtrl = null;
@@ -32,15 +33,22 @@ function getLevel(zoom) {
 }
 
 function upsert(map, fc, color) {
+    const vis = isHidden('tarifs') ? 'none' : 'visible';
     if (map.getLayer('tarifs-fill')) {
         map.getSource('tarifs-src').setData(fc);
         map.setPaintProperty('tarifs-fill', 'fill-color', color);
+        map.setLayoutProperty('tarifs-fill', 'visibility', vis);
+        map.setLayoutProperty('tarifs-line', 'visibility', vis);
     } else {
         ['tarifs-fill','tarifs-line'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
         if (map.getSource('tarifs-src')) map.removeSource('tarifs-src');
         map.addSource('tarifs-src', { type: 'geojson', data: fc });
-        map.addLayer({ id: 'tarifs-fill', type: 'fill', source: 'tarifs-src', paint: { 'fill-color': color, 'fill-opacity': 0.5 } });
-        map.addLayer({ id: 'tarifs-line', type: 'line', source: 'tarifs-src', paint: { 'line-color': '#444', 'line-width': 0.5 } });
+        map.addLayer({ id: 'tarifs-fill', type: 'fill', source: 'tarifs-src',
+            layout: { visibility: vis },
+            paint: { 'fill-color': color, 'fill-opacity': 0.5 } });
+        map.addLayer({ id: 'tarifs-line', type: 'line', source: 'tarifs-src',
+            layout: { visibility: vis },
+            paint: { 'line-color': '#444', 'line-width': 0.5 } });
         map.on('mouseenter', 'tarifs-fill', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'tarifs-fill', () => map.getCanvas().style.cursor = '');
     }

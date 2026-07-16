@@ -1,6 +1,7 @@
 import { showSpinner, hideSpinner, bddOnTop, apiFetch, EMPTY_FC } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
+import { isHidden } from '../catalogue.js';
 
 const ZOOM_POLY  = 12;   // en dessous → clusters, au-dessus → polygones hachurés
 
@@ -50,6 +51,7 @@ function centroidsFromFeatures(features) {
 
 // ── Build / update layers ─────────────────────────────────────
 function buildLayers(map, fc) {
+    const vis = isHidden('ta-majore') ? 'none' : 'visible';
     // ─ Source polygones ─
     if (map.getSource('ta-maj-poly')) {
         map.getSource('ta-maj-poly').setData(fc);
@@ -59,12 +61,14 @@ function buildLayers(map, fc) {
         // Fond semi-transparent
         map.addLayer({ id: 'ta-maj-fill', type: 'fill', source: 'ta-maj-poly',
             minzoom: ZOOM_POLY,
+            layout: { visibility: vis },
             paint: { 'fill-color': ['step', ['get','taux'],
                 PALETTE[0], 7, PALETTE[1], 10, PALETTE[2], 15, PALETTE[3], 20, PALETTE[4]],
                 'fill-opacity': 0.15 },
         });
         map.addLayer({ id: 'ta-maj-line', type: 'line', source: 'ta-maj-poly',
             minzoom: ZOOM_POLY,
+            layout: { visibility: vis },
             paint: { 'line-color': '#7f1d1d', 'line-width': 1.2 },
         });
 

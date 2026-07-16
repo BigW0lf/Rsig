@@ -1,6 +1,7 @@
 import { showSpinner, hideSpinner, stepExpr, computeBreaks, PAL, bddOnTop, apiFetch, EMPTY_FC } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
+import { isHidden } from '../catalogue.js';
 
 const DEPT_ZOOM = 9;
 let active    = false;
@@ -29,9 +30,12 @@ function upsert(map, fc, prop) {
     const breaks = computeBreaks(values, 5);
     const color  = stepExpr(prop, breaks, PAL.cfe);
 
+    const vis = isHidden('ta') ? 'none' : 'visible';
     if (map.getLayer('ta-fill')) {
         map.getSource('ta-src').setData(fc);
         map.setPaintProperty('ta-fill', 'fill-color', color);
+        map.setLayoutProperty('ta-fill', 'visibility', vis);
+        map.setLayoutProperty('ta-line', 'visibility', vis);
     } else {
         if (map.getSource('ta-src')) {
             ['ta-fill','ta-line'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
@@ -39,8 +43,10 @@ function upsert(map, fc, prop) {
         }
         map.addSource('ta-src', { type: 'geojson', data: fc });
         map.addLayer({ id: 'ta-fill', type: 'fill', source: 'ta-src',
+            layout: { visibility: vis },
             paint: { 'fill-color': color, 'fill-opacity': 0.5 } });
         map.addLayer({ id: 'ta-line', type: 'line', source: 'ta-src',
+            layout: { visibility: vis },
             paint: { 'line-color': '#555', 'line-width': 0.4 } });
     }
     bddOnTop(map);

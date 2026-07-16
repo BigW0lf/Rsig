@@ -1,6 +1,7 @@
 import { showSpinner, hideSpinner, stepExpr, PAL, bddOnTop, apiFetch, EMPTY_FC } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
+import { isHidden } from '../catalogue.js';
 
 let active = false;
 let abortCtrl = null;
@@ -51,9 +52,12 @@ function quantileBreaks(values, n) {
 }
 
 function upsert(map, fc, color) {
+    const vis = isHidden('tf') ? 'none' : 'visible';
     if (map.getLayer('tf-fill')) {
         map.getSource('tf-src').setData(fc);
         map.setPaintProperty('tf-fill', 'fill-color', color);
+        map.setLayoutProperty('tf-fill', 'visibility', vis);
+        map.setLayoutProperty('tf-line', 'visibility', vis);
     } else {
         if (map.getSource('tf-src')) {
             ['tf-fill', 'tf-line'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
@@ -61,8 +65,10 @@ function upsert(map, fc, color) {
         }
         map.addSource('tf-src', { type: 'geojson', data: fc });
         map.addLayer({ id: 'tf-fill', type: 'fill', source: 'tf-src',
+            layout: { visibility: vis },
             paint: { 'fill-color': color, 'fill-opacity': 0.45 } });
         map.addLayer({ id: 'tf-line', type: 'line', source: 'tf-src',
+            layout: { visibility: vis },
             paint: { 'line-color': '#444', 'line-width': 0.5 } });
     }
     bddOnTop(map);

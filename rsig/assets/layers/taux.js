@@ -1,6 +1,7 @@
 import { showSpinner, hideSpinner, stepExpr, PAL, computeBreaks, bddOnTop, apiFetch, EMPTY_FC } from '../utils.js';
 import { saveLegend, dropLegend } from '../legend.js';
 import { showInfo, clearInfo, irow } from '../panel.js';
+import { isHidden } from '../catalogue.js';
 
 let active   = false;
 let abortCtrl = null;
@@ -42,15 +43,22 @@ function fetchLayer(url, onData) {
 }
 
 function upsert(map, fc, color) {
+    const vis = isHidden('taux') ? 'none' : 'visible';
     if (map.getLayer('taux-fill')) {
         map.getSource('taux-src').setData(fc);
         map.setPaintProperty('taux-fill', 'fill-color', color);
+        map.setLayoutProperty('taux-fill', 'visibility', vis);
+        map.setLayoutProperty('taux-line', 'visibility', vis);
     } else {
         ['taux-fill','taux-line'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
         if (map.getSource('taux-src')) map.removeSource('taux-src');
         map.addSource('taux-src', { type: 'geojson', data: fc });
-        map.addLayer({ id: 'taux-fill', type: 'fill', source: 'taux-src', paint: { 'fill-color': color, 'fill-opacity': 0.5 } });
-        map.addLayer({ id: 'taux-line', type: 'line', source: 'taux-src', paint: { 'line-color': '#334', 'line-width': 0.5 } });
+        map.addLayer({ id: 'taux-fill', type: 'fill', source: 'taux-src',
+            layout: { visibility: vis },
+            paint: { 'fill-color': color, 'fill-opacity': 0.5 } });
+        map.addLayer({ id: 'taux-line', type: 'line', source: 'taux-src',
+            layout: { visibility: vis },
+            paint: { 'line-color': '#334', 'line-width': 0.5 } });
         map.on('mouseenter', 'taux-fill', () => map.getCanvas().style.cursor = 'pointer');
         map.on('mouseleave', 'taux-fill', () => map.getCanvas().style.cursor = '');
     }
