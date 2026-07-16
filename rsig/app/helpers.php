@@ -60,7 +60,7 @@ function validateMillesime(string $m): string {
 }
 
 function isNotModified(string $etag): bool {
-    $inm = Flight::request()->getHeader('If-None-Match') ?? '';
+    $inm = $_SERVER['HTTP_IF_NONE_MATCH'] ?? '';
     // Nginx ajoute "-gzip" au suffix ETag lors de la compression — normaliser
     $inm = preg_replace('/-gzip"$/', '"', $inm);
     return $inm === $etag;
