@@ -187,8 +187,13 @@ Flight::route('GET /api/crm/geojson', function () {
     $db = getDb();
     if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
 
+    $b = parseBbox();
+
     $hasTable = (int)$db->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name='crm_dossiers'")->fetchColumn();
     $count    = $hasTable ? (int)$db->query("SELECT COUNT(*) FROM crm_dossiers")->fetchColumn() : 0;
+
+    $bboxCond4326    = $b ? "AND ST_Intersects(geom, ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326))" : '';
+    $bboxCond2154    = $b ? "AND ST_Intersects(ST_Transform(geom::geometry,4326), ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326))" : '';
 
     if ($count > 0) {
         $sql = "SELECT
@@ -216,7 +221,7 @@ Flight::route('GET /api/crm/geojson', function () {
                     type_activite,
                     ST_AsGeoJSON(geom, 6)::text AS geojson
                 FROM crm_dossiers
-                WHERE geom IS NOT NULL";
+                WHERE geom IS NOT NULL $bboxCond4326";
     } else {
         // Fallback : table dossier_acc_geo
         $sql = "SELECT
@@ -244,14 +249,17 @@ Flight::route('GET /api/crm/geojson', function () {
                     NULL::text                         AS type_activite,
                     ST_AsGeoJSON(ST_Transform(geom::geometry, 4326), 6)::text AS geojson
                 FROM dossier_acc_geo
-                WHERE geom IS NOT NULL";
+                WHERE geom IS NOT NULL $bboxCond2154";
     }
 
-    $cacheKey = 'crm_geojson_' . ($count > 0 ? 'main' : 'fallback');
-    $cached = cacheGet($cacheKey);
+    $table    = $count > 0 ? 'main' : 'fallback';
+    $cacheKey = 'crm_geojson_' . $table . ($b ? '_' . md5(implode(',', $b)) : '');
+    $cached   = cacheGet($cacheKey);
     if ($cached !== null) { Flight::json($cached); return; }
 
-    $stmt = $db->query($sql);
+    $stmt = $db->prepare($sql);
+    if ($b) bindBbox($stmt, $b);
+    $stmt->execute();
     $features = [];
     foreach ($stmt as $row) {
         $g = json_decode($row['geojson'], true);
@@ -259,7 +267,7 @@ Flight::route('GET /api/crm/geojson', function () {
         $features[] = ['type'=>'Feature','geometry'=>$g,'properties'=>$row];
     }
     $fc = ['type'=>'FeatureCollection','features'=>$features];
-    cacheSet($cacheKey, $fc, 300);
+    cacheSet($cacheKey, $fc, $b ? 60 : 300);
     Flight::json($fc);
 });
 

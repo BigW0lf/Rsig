@@ -9,7 +9,9 @@ let loaded = false;
 export function loadDossiers(map) {
     if (!active || loaded) return;
     showSpinner();
-    apiFetch('/api/crm/geojson')
+    const b = map.getBounds();
+    const bbox = `${b.getWest().toFixed(4)},${b.getSouth().toFixed(4)},${b.getEast().toFixed(4)},${b.getNorth().toFixed(4)}`;
+    apiFetch(`/api/crm/geojson?bbox=${bbox}`)
         .then(r => r.json())
         .then(fc => {
             hideSpinner();
