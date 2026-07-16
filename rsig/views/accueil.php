@@ -906,6 +906,11 @@ window.addEventListener('load', () => {
     check();
     setInterval(check, 30000);
 })();
+
+// Vider le buffer PerformanceResourceTiming saturé par les tuiles WMTS (défaut 150 entrées)
+if (performance?.clearResourceTimings) {
+    setInterval(() => performance.clearResourceTimings(), 30000);
+}
 </script>
 </body>
 </html>

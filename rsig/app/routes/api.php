@@ -254,8 +254,19 @@ Flight::route('GET /api/crm/geojson', function () {
 
     $table    = $count > 0 ? 'main' : 'fallback';
     $cacheKey = 'crm_geojson_' . $table . ($b ? '_' . md5(implode(',', $b)) : '');
-    $cached   = cacheGet($cacheKey);
-    if ($cached !== null) { Flight::json($cached); return; }
+    $ttl      = $b ? 60 : 300;
+    $etag     = '"' . md5($cacheKey) . '"';
+
+    if ((Flight::request()->getHeader('If-None-Match') ?? '') === $etag) {
+        http_response_code(304); return;
+    }
+
+    $cached = cacheGet($cacheKey);
+    if ($cached !== null) {
+        header('Cache-Control: private, max-age=' . $ttl);
+        header('ETag: ' . $etag);
+        Flight::json($cached); return;
+    }
 
     $stmt = $db->prepare($sql);
     if ($b) bindBbox($stmt, $b);
@@ -267,7 +278,9 @@ Flight::route('GET /api/crm/geojson', function () {
         $features[] = ['type'=>'Feature','geometry'=>$g,'properties'=>$row];
     }
     $fc = ['type'=>'FeatureCollection','features'=>$features];
-    cacheSet($cacheKey, $fc, $b ? 60 : 300);
+    cacheSet($cacheKey, $fc, $ttl);
+    header('Cache-Control: private, max-age=' . $ttl);
+    header('ETag: ' . $etag);
     Flight::json($fc);
 });
 
@@ -1967,8 +1980,18 @@ Flight::route('GET /api/tarifs/departements', function () {
     }
     $annee  = validateAnnee(Flight::request()->query['annee'] ?? '');
     $cacheKey = 'tarifs_dep_' . $cat . '_' . $annee;
+    $etag     = '"' . md5($cacheKey) . '"';
+
+    if ((Flight::request()->getHeader('If-None-Match') ?? '') === $etag) {
+        http_response_code(304); return;
+    }
+
     $cached = cacheGet($cacheKey);
-    if ($cached !== null) { Flight::json($cached); return; }
+    if ($cached !== null) {
+        header('Cache-Control: public, max-age=86400');
+        header('ETag: ' . $etag);
+        Flight::json($cached); return;
+    }
 
     $col = "val_$annee";
     $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
@@ -1985,6 +2008,8 @@ Flight::route('GET /api/tarifs/departements', function () {
     $stmt->execute();
     $fc = ['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)];
     cacheSet($cacheKey, $fc, 3600);
+    header('Cache-Control: public, max-age=86400');
+    header('ETag: ' . $etag);
     Flight::json($fc);
 });
 

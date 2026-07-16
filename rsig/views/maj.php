@@ -324,7 +324,7 @@ function startCrmPolling() {
                 loadCrmStatus();
             }
         });
-    }, 4000);
+    }, 30000);
 }
 
 document.getElementById('btn-crm-sync').addEventListener('click', () => {
