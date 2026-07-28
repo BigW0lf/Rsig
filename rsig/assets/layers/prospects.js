@@ -31,7 +31,7 @@ const COLOR_LOW  = '#eab308';
 // ── Couleurs par commercial ───────────────────────────────────────────────────
 const COM_COLOR = {
     laurent:  '#0ea5e9',   // bleu ciel
-    mathilde: '#f43f5e',   // rose
+    mathilde: '#10b981',   // vert émeraude
     leo:      '#f59e0b',   // ambre
     nathalie: '#a855f7',   // violet
 };
@@ -251,6 +251,17 @@ function _applyColorMode() {
     _saveLegend();
 }
 
+function _syncPill() {
+    const pill  = document.getElementById('cm-toggle');
+    const lblCom = document.getElementById('cm-label-commercial');
+    const lblSt  = document.getElementById('cm-label-statut');
+    const hidden = document.getElementById('prospects-colormode');
+    if (pill) pill.dataset.mode = _colorMode;
+    if (hidden) hidden.value = _colorMode;
+    if (lblCom) lblCom.classList.toggle('cm-active', _colorMode === 'commercial');
+    if (lblSt)  lblSt.classList.toggle('cm-active',  _colorMode === 'statut');
+}
+
 // ── Légende ────────────────────────────────────────────────────────────────────
 function _saveLegend() {
     if (_colorMode === 'statut') {
@@ -265,7 +276,7 @@ function _saveLegend() {
         saveLegend(
             'prospects',
             'Prospects – par commercial',
-            ['Laurent', 'Mathilde', 'Léo', 'Nathalie', '— Non attribué —', 'Contacté', 'En attente', 'Annulé', 'Client'],
+            ['Laurent', 'Mathilde', 'Léo', 'Nathalie', 'Non attribué', 'Contacté', 'En attente', 'Annulé', 'Client'],
             [COM_COLOR.laurent, COM_COLOR.mathilde, COM_COLOR.leo, COM_COLOR.nathalie,
              COLOR_HIGH, STATUT_COLOR.contacte, STATUT_COLOR.en_attente, STATUT_COLOR.annule, STATUT_COLOR.client]
         );
@@ -315,17 +326,15 @@ export function initProspects(map) {
         });
     }
 
-    // Boutons mode couleur : commercial / état
-    document.querySelectorAll('.prospect-mode-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.prospect-mode-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            _colorMode = btn.dataset.mode;
-            const hidden = document.getElementById('prospects-colormode');
-            if (hidden) hidden.value = _colorMode;
+    // Pill toggle commercial ↔ état
+    const pill = document.getElementById('cm-toggle');
+    if (pill) {
+        pill.addEventListener('click', () => {
+            _colorMode = _colorMode === 'commercial' ? 'statut' : 'commercial';
+            _syncPill();
             _applyColorMode();
         });
-    });
+    }
 
     // Bouton "Clients RTaxes uniquement"
     const rtaxesBtn = document.getElementById('prospects-rtaxes-only');
@@ -400,7 +409,7 @@ export function initProspects(map) {
             _clientFilter = '';
             _activeCommerciaux = new Set(['__tous__','__non_attribue__','laurent','mathilde','leo','nathalie']);
             _colorMode = 'commercial';
-            document.querySelectorAll('.prospect-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'commercial'));
+            _syncPill();
             const clientInput = document.getElementById('prospects-client-filter');
             if (clientInput) clientInput.value = '';
             const btn = document.getElementById('prospects-rtaxes-only');
@@ -415,9 +424,7 @@ export function initProspects(map) {
         const hiddenMode = document.getElementById('prospects-colormode');
         if (hiddenMode?.value) {
             _colorMode = hiddenMode.value;
-            document.querySelectorAll('.prospect-mode-btn').forEach(b =>
-                b.classList.toggle('active', b.dataset.mode === _colorMode)
-            );
+            _syncPill();
         }
         showSpinner();
         apiFetch('/api/prospects')

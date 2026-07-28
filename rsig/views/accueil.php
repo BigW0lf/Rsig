@@ -521,8 +521,9 @@ kbd {
                 </div>
                 <input type="hidden" id="prospects-colormode" value="commercial">
                 <div class="prospect-colormode-row">
-                    <button class="prospect-mode-btn active" id="prospects-mode-com" data-mode="commercial">Par commercial</button>
-                    <button class="prospect-mode-btn" id="prospects-mode-statut" data-mode="statut">Par état</button>
+                    <span class="cm-active" id="cm-label-commercial">Commercial</span>
+                    <button class="cm-pill" id="cm-toggle" data-mode="commercial" title="Basculer l'affichage"></button>
+                    <span id="cm-label-statut">État</span>
                 </div>
                 <div class="prospect-filter-dual">
                     <div>
@@ -541,7 +542,7 @@ kbd {
                             <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="__tous__" checked><span class="prospect-filter-dot" style="background:var(--text3)"></span>Tous</label>
                             <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="__non_attribue__" checked><span class="prospect-filter-dot" style="background:#e2e8f0;border:1px solid #94a3b8"></span>—</label>
                             <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="laurent" checked><span class="prospect-filter-dot" style="background:#0ea5e9"></span>Laurent</label>
-                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="mathilde" checked><span class="prospect-filter-dot" style="background:#f43f5e"></span>Mathilde</label>
+                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="mathilde" checked><span class="prospect-filter-dot" style="background:#10b981"></span>Mathilde</label>
                             <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="leo" checked><span class="prospect-filter-dot" style="background:#f59e0b"></span>Léo</label>
                             <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="nathalie" checked><span class="prospect-filter-dot" style="background:#a855f7"></span>Nathalie</label>
                         </div>

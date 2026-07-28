@@ -588,8 +588,9 @@ function injectStyles() {
     margin: 0;
     padding: 8px 12px 10px;
     display: flex !important;
+    flex-direction: column !important;
 }
-.cat-card-body .layer-sub.hidden { display: flex !important; }
+.cat-card-body .layer-sub.hidden { display: flex !important; flex-direction: column !important; }
 #dossiers-filter-wrap {
     padding: 8px 12px 10px;
     border-top: 1px solid var(--border2);
