@@ -346,6 +346,30 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
     flex-shrink: 0;
     margin: 0;
 }
+/* Boutons commerciaux solo-select */
+.prospect-com-filter {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--text3);
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 2px 5px 2px 2px;
+    cursor: pointer;
+    text-align: left;
+    opacity: .45;
+    transition: opacity .15s, color .15s, border-color .15s;
+}
+.prospect-com-filter.com-active {
+    color: var(--text);
+    opacity: 1;
+}
+.prospect-com-filter:hover {
+    border-color: var(--border);
+    opacity: 1;
+}
 .prospect-filter-dot {
     width: 10px; height: 10px;
     border-radius: 50%;
@@ -414,12 +438,12 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
 .prospect-colormode-row span.cm-active {
     color: var(--text);
 }
-/* Pill slider */
+/* Pill slider — gauche=commercial, droite=statut */
 .cm-pill {
     position: relative;
     width: 44px;
     height: 22px;
-    background: var(--border);
+    background: var(--accent, #2563eb);
     border-radius: 11px;
     cursor: pointer;
     border: none;
@@ -428,7 +452,7 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
     transition: background .2s;
 }
 .cm-pill[data-mode="statut"] {
-    background: var(--accent, #2563eb);
+    background: #8b5cf6;
 }
 .cm-pill::after {
     content: '';

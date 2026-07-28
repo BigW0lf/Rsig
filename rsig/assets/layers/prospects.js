@@ -262,24 +262,37 @@ function _syncPill() {
     if (lblSt)  lblSt.classList.toggle('cm-active',  _colorMode === 'statut');
 }
 
-// ── Légende ────────────────────────────────────────────────────────────────────
+// ── Légende — reflète exactement le filtre actif ──────────────────────────────
 function _saveLegend() {
+    // Commerciaux actuellement visibles (hors __tous__ et __non_attribue__)
+    const comActifs = ['laurent','mathilde','leo','nathalie'].filter(c => _activeCommerciaux.has(c));
+    const solocom   = comActifs.length === 1 ? comActifs[0] : null; // 1 seul commercial sélectionné
+
     if (_colorMode === 'statut') {
-        saveLegend(
-            'prospects',
-            'Prospects – par état',
-            ['Nouveau (évol. haute)', 'Nouveau (évol. moy.)', 'Nouveau', 'Contacté', 'En attente', 'Annulé', 'Client'],
-            [COLOR_HIGH, COLOR_MED, COLOR_LOW,
-             STATUT_COLOR.contacte, STATUT_COLOR.en_attente, STATUT_COLOR.annule, STATUT_COLOR.client]
+        // Mode état : légende = les états, avec nom du commercial si filtré
+        const titre = solocom
+            ? `Prospects – ${COM_LABEL[solocom]} par état`
+            : 'Prospects – par état';
+        saveLegend('prospects', titre,
+            ['Nouveau',        'Contacté',             'En attente',              'Annulé',             'Client'],
+            [COLOR_HIGH, STATUT_COLOR.contacte, STATUT_COLOR.en_attente, STATUT_COLOR.annule, STATUT_COLOR.client]
         );
     } else {
-        saveLegend(
-            'prospects',
-            'Prospects – par commercial',
-            ['Laurent', 'Mathilde', 'Léo', 'Nathalie', 'Non attribué', 'Contacté', 'En attente', 'Annulé', 'Client'],
-            [COM_COLOR.laurent, COM_COLOR.mathilde, COM_COLOR.leo, COM_COLOR.nathalie,
-             COLOR_HIGH, STATUT_COLOR.contacte, STATUT_COLOR.en_attente, STATUT_COLOR.annule, STATUT_COLOR.client]
-        );
+        // Mode commercial : légende = les commerciaux actifs seulement
+        const labels = [];
+        const pal    = [];
+        if (_activeCommerciaux.has('__tous__') || comActifs.length === 4) {
+            // tous → afficher tout
+            labels.push(...['Laurent','Mathilde','Léo','Nathalie']);
+            pal.push(...[COM_COLOR.laurent, COM_COLOR.mathilde, COM_COLOR.leo, COM_COLOR.nathalie]);
+        } else {
+            comActifs.forEach(c => { labels.push(COM_LABEL[c]); pal.push(COM_COLOR[c]); });
+        }
+        // Ajouter états résiduels (non attribués) si pertinent
+        if (_activeCommerciaux.has('__non_attribue__') || _activeCommerciaux.has('__tous__')) {
+            labels.push('Nouveau'); pal.push(COLOR_HIGH);
+        }
+        saveLegend('prospects', 'Prospects – par commercial', labels, pal);
     }
 }
 
@@ -356,23 +369,31 @@ export function initProspects(map) {
         });
     });
 
-    // Checkboxes commercial — "Tous" coche/décoche tout
-    document.querySelectorAll('.prospect-com-filter').forEach(cb => {
-        cb.addEventListener('change', () => {
-            if (cb.value === '__tous__') {
-                const checked = cb.checked;
-                document.querySelectorAll('.prospect-com-filter').forEach(c => { c.checked = checked; });
+    // Filtres commerciaux — clic solo : sélectionne un seul ; reclic sur seul actif → tous
+    document.querySelectorAll('.prospect-com-filter').forEach(item => {
+        item.addEventListener('click', e => {
+            e.preventDefault(); // on gère nous-mêmes l'état
+            const val = item.dataset.com;
+            const all = [...document.querySelectorAll('.prospect-com-filter')];
+
+            if (val === '__tous__') {
+                // Clic "Tous" → toujours remettre tous
+                all.forEach(i => i.classList.add('com-active'));
+                _activeCommerciaux = new Set(['__tous__','__non_attribue__','laurent','mathilde','leo','nathalie']);
             } else {
-                const tousCb = document.querySelector('.prospect-com-filter[value="__tous__"]');
-                if (tousCb) {
-                    const allOthers = [...document.querySelectorAll('.prospect-com-filter:not([value="__tous__"])')];
-                    tousCb.checked = allOthers.every(c => c.checked);
+                const isCurrentlySolo = _activeCommerciaux.size === 1 && _activeCommerciaux.has(val);
+                if (isCurrentlySolo) {
+                    // Reclic sur le seul actif → remettre tous
+                    all.forEach(i => i.classList.add('com-active'));
+                    _activeCommerciaux = new Set(['__tous__','__non_attribue__','laurent','mathilde','leo','nathalie']);
+                } else {
+                    // Sélection solo
+                    all.forEach(i => i.classList.toggle('com-active', i.dataset.com === val));
+                    _activeCommerciaux = new Set([val]);
                 }
             }
-            _activeCommerciaux = new Set(
-                [...document.querySelectorAll('.prospect-com-filter:checked')].map(c => c.value)
-            );
             _applyFilter();
+            _saveLegend();
         });
     });
 
@@ -408,13 +429,14 @@ export function initProspects(map) {
             _rtaxesOnly  = false;
             _clientFilter = '';
             _activeCommerciaux = new Set(['__tous__','__non_attribue__','laurent','mathilde','leo','nathalie']);
+            document.querySelectorAll('.prospect-com-filter').forEach(i => i.classList.add('com-active'));
             _colorMode = 'commercial';
             _syncPill();
             const clientInput = document.getElementById('prospects-client-filter');
             if (clientInput) clientInput.value = '';
             const btn = document.getElementById('prospects-rtaxes-only');
             if (btn) btn.dataset.active = '0';
-            document.querySelectorAll('.prospect-com-filter').forEach(c => { c.checked = true; });
+            // reset déjà fait plus haut via .classList.add('com-active')
             dropLegend('prospects');
             clearInfo('prospects');
             return;

@@ -537,14 +537,14 @@ kbd {
                         </div>
                     </div>
                     <div>
-                        <div class="prospect-filter-title">Commercial</div>
+                        <div class="prospect-filter-title">Commercial <span style="font-weight:400;color:var(--text3)">(clic = solo)</span></div>
                         <div class="prospect-filter-commerciaux">
-                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="__tous__" checked><span class="prospect-filter-dot" style="background:var(--text3)"></span>Tous</label>
-                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="__non_attribue__" checked><span class="prospect-filter-dot" style="background:#e2e8f0;border:1px solid #94a3b8"></span>—</label>
-                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="laurent" checked><span class="prospect-filter-dot" style="background:#0ea5e9"></span>Laurent</label>
-                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="mathilde" checked><span class="prospect-filter-dot" style="background:#10b981"></span>Mathilde</label>
-                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="leo" checked><span class="prospect-filter-dot" style="background:#f59e0b"></span>Léo</label>
-                            <label class="prospect-filter-item"><input type="checkbox" class="prospect-com-filter" value="nathalie" checked><span class="prospect-filter-dot" style="background:#a855f7"></span>Nathalie</label>
+                            <button class="prospect-com-filter com-active" data-com="__tous__"><span class="prospect-filter-dot" style="background:var(--text3)"></span>Tous</button>
+                            <button class="prospect-com-filter com-active" data-com="__non_attribue__"><span class="prospect-filter-dot" style="background:#e2e8f0;border:1px solid #94a3b8"></span>—</button>
+                            <button class="prospect-com-filter com-active" data-com="laurent"><span class="prospect-filter-dot" style="background:#0ea5e9"></span>Laurent</button>
+                            <button class="prospect-com-filter com-active" data-com="mathilde"><span class="prospect-filter-dot" style="background:#10b981"></span>Mathilde</button>
+                            <button class="prospect-com-filter com-active" data-com="leo"><span class="prospect-filter-dot" style="background:#f59e0b"></span>Léo</button>
+                            <button class="prospect-com-filter com-active" data-com="nathalie"><span class="prospect-filter-dot" style="background:#a855f7"></span>Nathalie</button>
                         </div>
                     </div>
                 </div>
