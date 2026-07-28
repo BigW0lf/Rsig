@@ -42,6 +42,9 @@ const COM_LABEL = {
     nathalie: 'Nathalie',
 };
 
+// ── Mode couleur : 'commercial' | 'statut' ───────────────────────────────────
+let _colorMode = 'commercial';
+
 // ── Filtres actifs ─────────────────────────────────────────────────────────
 let _activeStatuts      = new Set(['nouveau','contacte','en_attente','annule','client']);
 let _activeCommerciaux  = new Set(['__tous__','__non_attribue__','laurent','mathilde','leo','nathalie']);
@@ -213,15 +216,60 @@ function showProspectPanel(p) {
         });
 }
 
+// ── Paint expression selon le mode ───────────────────────────────────────────
+function _colorExpression() {
+    if (_colorMode === 'statut') {
+        return ['case',
+            ['==', ['get', 'statut'], 'contacte'],   STATUT_COLOR.contacte,
+            ['==', ['get', 'statut'], 'en_attente'], STATUT_COLOR.en_attente,
+            ['==', ['get', 'statut'], 'annule'],     STATUT_COLOR.annule,
+            ['==', ['get', 'statut'], 'client'],     STATUT_COLOR.client,
+            ['>=', ['to-number', ['get', 'evol_pct']], 20], COLOR_HIGH,
+            ['>=', ['to-number', ['get', 'evol_pct']], 10], COLOR_MED,
+            COLOR_LOW,
+        ];
+    }
+    // mode commercial (défaut)
+    return ['case',
+        ['==', ['get', 'commercial'], 'laurent'],  COM_COLOR.laurent,
+        ['==', ['get', 'commercial'], 'mathilde'], COM_COLOR.mathilde,
+        ['==', ['get', 'commercial'], 'leo'],      COM_COLOR.leo,
+        ['==', ['get', 'commercial'], 'nathalie'], COM_COLOR.nathalie,
+        ['==', ['get', 'statut'], 'contacte'],   STATUT_COLOR.contacte,
+        ['==', ['get', 'statut'], 'en_attente'], STATUT_COLOR.en_attente,
+        ['==', ['get', 'statut'], 'annule'],     STATUT_COLOR.annule,
+        ['==', ['get', 'statut'], 'client'],     STATUT_COLOR.client,
+        ['>=', ['to-number', ['get', 'evol_pct']], 20], COLOR_HIGH,
+        ['>=', ['to-number', ['get', 'evol_pct']], 10], COLOR_MED,
+        COLOR_LOW,
+    ];
+}
+
+function _applyColorMode() {
+    if (!map_ref || !map_ref.getLayer('prospects-circle')) return;
+    map_ref.setPaintProperty('prospects-circle', 'circle-color', _colorExpression());
+    _saveLegend();
+}
+
 // ── Légende ────────────────────────────────────────────────────────────────────
 function _saveLegend() {
-    saveLegend(
-        'prospects',
-        'Prospects – commercial / état',
-        ['Laurent', 'Mathilde', 'Léo', 'Nathalie', '— Non attribué —', 'Contacté', 'En attente', 'Annulé', 'Client'],
-        [COM_COLOR.laurent, COM_COLOR.mathilde, COM_COLOR.leo, COM_COLOR.nathalie,
-         COLOR_HIGH, STATUT_COLOR.contacte, STATUT_COLOR.en_attente, STATUT_COLOR.annule, STATUT_COLOR.client]
-    );
+    if (_colorMode === 'statut') {
+        saveLegend(
+            'prospects',
+            'Prospects – par état',
+            ['Nouveau (évol. haute)', 'Nouveau (évol. moy.)', 'Nouveau', 'Contacté', 'En attente', 'Annulé', 'Client'],
+            [COLOR_HIGH, COLOR_MED, COLOR_LOW,
+             STATUT_COLOR.contacte, STATUT_COLOR.en_attente, STATUT_COLOR.annule, STATUT_COLOR.client]
+        );
+    } else {
+        saveLegend(
+            'prospects',
+            'Prospects – par commercial',
+            ['Laurent', 'Mathilde', 'Léo', 'Nathalie', '— Non attribué —', 'Contacté', 'En attente', 'Annulé', 'Client'],
+            [COM_COLOR.laurent, COM_COLOR.mathilde, COM_COLOR.leo, COM_COLOR.nathalie,
+             COLOR_HIGH, STATUT_COLOR.contacte, STATUT_COLOR.en_attente, STATUT_COLOR.annule, STATUT_COLOR.client]
+        );
+    }
 }
 
 export function initProspects(map) {
@@ -266,6 +314,18 @@ export function initProspects(map) {
             return results;
         });
     }
+
+    // Boutons mode couleur : commercial / état
+    document.querySelectorAll('.prospect-mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.prospect-mode-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            _colorMode = btn.dataset.mode;
+            const hidden = document.getElementById('prospects-colormode');
+            if (hidden) hidden.value = _colorMode;
+            _applyColorMode();
+        });
+    });
 
     // Bouton "Clients RTaxes uniquement"
     const rtaxesBtn = document.getElementById('prospects-rtaxes-only');
@@ -339,6 +399,8 @@ export function initProspects(map) {
             _rtaxesOnly  = false;
             _clientFilter = '';
             _activeCommerciaux = new Set(['__tous__','__non_attribue__','laurent','mathilde','leo','nathalie']);
+            _colorMode = 'commercial';
+            document.querySelectorAll('.prospect-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'commercial'));
             const clientInput = document.getElementById('prospects-client-filter');
             if (clientInput) clientInput.value = '';
             const btn = document.getElementById('prospects-rtaxes-only');
@@ -349,6 +411,14 @@ export function initProspects(map) {
             return;
         }
         if (loaded) return;
+        // Lire le mode restauré par applyState avant de charger
+        const hiddenMode = document.getElementById('prospects-colormode');
+        if (hiddenMode?.value) {
+            _colorMode = hiddenMode.value;
+            document.querySelectorAll('.prospect-mode-btn').forEach(b =>
+                b.classList.toggle('active', b.dataset.mode === _colorMode)
+            );
+        }
         showSpinner();
         apiFetch('/api/prospects')
             .then(r => r.json())
@@ -375,21 +445,7 @@ export function initProspects(map) {
                 map.addLayer({ id: 'prospects-circle', type: 'circle', source: 'prospects-src',
                     filter: ['!', ['has', 'point_count']],
                     paint: {
-                        'circle-color': ['case',
-                            ['==', ['get', 'commercial'], 'laurent'],  COM_COLOR.laurent,
-                            ['==', ['get', 'commercial'], 'mathilde'], COM_COLOR.mathilde,
-                            ['==', ['get', 'commercial'], 'leo'],      COM_COLOR.leo,
-                            ['==', ['get', 'commercial'], 'nathalie'], COM_COLOR.nathalie,
-                            // pas de commercial → couleur statut
-                            ['==', ['get', 'statut'], 'contacte'],   STATUT_COLOR.contacte,
-                            ['==', ['get', 'statut'], 'en_attente'], STATUT_COLOR.en_attente,
-                            ['==', ['get', 'statut'], 'annule'],     STATUT_COLOR.annule,
-                            ['==', ['get', 'statut'], 'client'],     STATUT_COLOR.client,
-                            // nouveau non attribué → couleur évolution
-                            ['>=', ['to-number', ['get', 'evol_pct']], 20], COLOR_HIGH,
-                            ['>=', ['to-number', ['get', 'evol_pct']], 10], COLOR_MED,
-                            COLOR_LOW,
-                        ],
+                        'circle-color': _colorExpression(),
                         'circle-radius': ['case',
                             ['==', ['get', 'statut'], 'client'], 10,
                             8,

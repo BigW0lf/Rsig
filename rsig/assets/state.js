@@ -19,12 +19,13 @@ const LAYER_OPTS = {
     'tsb-paca':  ['tsb-paca-millesime'],
     tass:        ['tass-millesime'],
     tarifs:      ['tarifs-cat', 'tarifs-annee'],
+    prospects:   ['prospects-colormode'],
 };
 
 // Couches sans options
 const ALL_LAYERS = [
     'ortho','taux','coeff','sections','cfe','tf','ta','ta-majore',
-    'tsb-idf','tsb-paca','tass','zfu','dossiers','tarifs',
+    'tsb-idf','tsb-paca','tass','zfu','dossiers','tarifs','prospects',
 ];
 
 // ── Snapshot de l'état courant ───────────────────────────────────────────────

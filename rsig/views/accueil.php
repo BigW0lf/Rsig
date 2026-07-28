@@ -519,6 +519,11 @@ kbd {
                 <div class="prospect-crm-filter-row" style="margin-top:6px">
                     <button id="prospects-rtaxes-only" class="prospect-rtaxes-btn" data-active="0">★ Clients RTaxes uniquement</button>
                 </div>
+                <input type="hidden" id="prospects-colormode" value="commercial">
+                <div class="prospect-colormode-row">
+                    <button class="prospect-mode-btn active" id="prospects-mode-com" data-mode="commercial">Par commercial</button>
+                    <button class="prospect-mode-btn" id="prospects-mode-statut" data-mode="statut">Par état</button>
+                </div>
                 <div class="prospect-filter-dual">
                     <div>
                         <div class="prospect-filter-title">États</div>

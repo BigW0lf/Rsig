@@ -678,7 +678,7 @@ Flight::route('GET /api/prospects', function () {
 });
 
 Flight::route('POST /api/prospects/statut', function () {
-    if (!isAdmin()) { Flight::json(['error' => 'Accès refusé'], 403); return; }
+    if (!isAuthenticated()) { Flight::json(['error' => 'Accès refusé'], 403); return; }
     $body   = json_decode(file_get_contents('php://input'), true);
     $idu    = preg_replace('/[^A-Za-z0-9]/', '', $body['idu']    ?? '');
     $statut = $body['statut'] ?? '';
