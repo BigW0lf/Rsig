@@ -4,10 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RSig — Carte</title>
-    <link rel="preconnect" href="https://unpkg.com" crossorigin="">
     <link rel="preconnect" href="https://data.geopf.fr" crossorigin="">
     <link rel="preconnect" href="https://wxs.ign.fr" crossorigin="">
-    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css" crossorigin="">
+    <link rel="stylesheet" href="assets/maplibre-gl.css?v=4.7.1">
     <link rel="stylesheet" href="assets/style.css?v=<?= ASSET_VER ?>">
     <link rel="modulepreload" href="assets/map.js?v=<?= ASSET_VER ?>">
     <style>
@@ -615,7 +614,7 @@ kbd {
 
 </div>
 
-<script src="https://unpkg.com/maplibre-gl/dist/maplibre-gl.js" crossorigin=""></script>
+<script src="assets/maplibre-gl.js?v=4.7.1"></script>
 <script type="module" src="assets/map.js?v=<?= ASSET_VER ?>"></script>
 <script>
 // ── Recherche géocodage ──────────────────────────────────
