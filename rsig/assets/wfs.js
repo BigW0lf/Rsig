@@ -95,7 +95,7 @@ export function updateWfs(map) {
     if (_initialized) return;
     _initialized = true;
 
-    // 1. Limites admin (depts/communes) en raster jusqu'à z13
+    // 1. Limites admin (depts/communes) + noms de villes en raster
     map.addSource('ign-limites', {
         type: 'raster',
         tiles: [IGN_LIMITES_TMS],
@@ -134,17 +134,12 @@ function _fetchDept(map) {
         .then(data => {
             hideSpinner();
             if (!data?.features) return;
-            const s = style.departements;
+            // Source invisible uniquement pour le clic — le rendu vient du TMS raster
             map.addSource('wfs-dept-src', { type: 'geojson', data });
             map.addLayer({
                 id: 'wfs-dept-fill', type: 'fill', source: 'wfs-dept-src',
                 maxzoom: 9,
-                paint: { 'fill-color': s.fill, 'fill-opacity': s.opacity },
-            });
-            map.addLayer({
-                id: 'wfs-dept-line', type: 'line', source: 'wfs-dept-src',
-                maxzoom: 9,
-                paint: { 'line-color': s.line, 'line-width': s.lw },
+                paint: { 'fill-color': '#000000', 'fill-opacity': 0 },
             });
         })
         .catch(() => hideSpinner());

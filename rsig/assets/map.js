@@ -44,16 +44,6 @@ const map = new maplibregl.Map({
                 ],
                 tileSize: 256, maxzoom: 19, attribution: 'IGN-F/Géoportail',
             },
-            ign_labels: {
-                type: 'raster',
-                tiles: [
-                    'https://data.geopf.fr/wmts?REQUEST=GetTile&SERVICE=WMTS&VERSION=1.0.0'
-                    + '&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png'
-                    + '&LAYER=GEOGRAPHICALNAMES.NAMES'
-                    + '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}'
-                ],
-                tileSize: 256, maxzoom: 18, attribution: 'IGN-F/Géoportail',
-            },
             osm_tiles: {
                 type: 'raster',
                 tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
@@ -62,7 +52,6 @@ const map = new maplibregl.Map({
         },
         layers: [
             { id: 'ign-ortho',  type: 'raster', source: 'ign_ortho' },
-            { id: 'ign-labels', type: 'raster', source: 'ign_labels' },
             { id: 'osm-tiles',  type: 'raster', source: 'osm_tiles', layout: { visibility: 'none' } },
         ],
     },
@@ -117,7 +106,6 @@ class BasemapControl {
             );
             slider.style.transform = sat ? 'translateX(0)' : 'translateX(100%)';
             m.setLayoutProperty('ign-ortho',  'visibility', sat  ? 'visible' : 'none');
-            m.setLayoutProperty('ign-labels', 'visibility', sat  ? 'visible' : 'none');
             m.setLayoutProperty('osm-tiles',  'visibility', !sat ? 'visible' : 'none');
             yearSel.style.display = sat ? '' : 'none';
         }
