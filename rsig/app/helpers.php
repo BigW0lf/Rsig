@@ -1,6 +1,6 @@
 <?php
 
-define('DB_FLAG_PATH', __DIR__ . '/../../db_offline.flag');
+define('DB_FLAG_PATH', __DIR__ . '/../cache/db_offline.flag');
 
 // Hash git court pour cache-busting des assets statiques
 define('ASSET_VER', trim(@shell_exec('git -C ' . escapeshellarg(__DIR__ . '/../') . ' rev-parse --short HEAD 2>/dev/null') ?: (getenv('GIT_TAG') ?: 'dev')));
