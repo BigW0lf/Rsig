@@ -623,6 +623,100 @@ Flight::route('GET /api/wfs/departements', function () {
     Flight::json($fc);
 });
 
+// ── WFS proxy — communes depuis PG (simplifié, pour fond de carte) ───────────
+Flight::route('GET /api/wfs/communes', function () {
+    $cacheKey = 'wfs_communes';
+    $etag     = '"' . md5($cacheKey) . '"';
+    if (isNotModified($etag)) { Flight::halt(304); }
+    $cached = cacheGet($cacheKey);
+    if ($cached !== null) {
+        header('Cache-Control: public, max-age=86400');
+        header('ETag: ' . $etag);
+        Flight::json($cached); return;
+    }
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $stmt = $db->query("
+        SELECT insee AS code_insee, nom AS nom_com,
+               ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.02), 3)::text AS geojson
+        FROM communes_geom
+        ORDER BY insee
+    ");
+    $features = [];
+    foreach ($stmt as $row) {
+        $g = json_decode($row['geojson'], true);
+        $features[] = ['type' => 'Feature', 'geometry' => $g,
+                       'properties' => ['code_insee' => $row['code_insee'], 'nom_com' => $row['nom_com']]];
+    }
+    $fc = ['type' => 'FeatureCollection', 'features' => $features];
+    cacheSet($cacheKey, $fc, 86400);
+    header('Cache-Control: public, max-age=86400');
+    header('ETag: ' . $etag);
+    Flight::json($fc);
+});
+
+// ── WFS proxy — communes par bbox (fond de carte dynamique) ──────────────────
+Flight::route('GET /api/wfs/communes-bbox', function () {
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $bbox = Flight::request()->query['bbox'] ?? '';
+    if (!$bbox || !preg_match('/^-?\d+\.?\d*,-?\d+\.?\d*,-?\d+\.?\d*,-?\d+\.?\d*$/', $bbox)) {
+        Flight::json(['error' => 'bbox invalide'], 400); return;
+    }
+    [$xmin, $ymin, $xmax, $ymax] = explode(',', $bbox);
+    $cacheKey = 'wfs_communes_bbox_' . md5($bbox);
+    $cached = cacheGet($cacheKey);
+    if ($cached !== null) { Flight::json($cached); return; }
+    $stmt = $db->prepare("
+        SELECT insee AS code_insee, nom AS nom_com,
+               ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.001), 4)::text AS geojson
+        FROM communes_geom
+        WHERE geom && ST_MakeEnvelope(:xmin, :ymin, :xmax, :ymax, 4326)
+        ORDER BY insee
+    ");
+    $stmt->execute([':xmin' => $xmin, ':ymin' => $ymin, ':xmax' => $xmax, ':ymax' => $ymax]);
+    $features = [];
+    foreach ($stmt as $row) {
+        $g = json_decode($row['geojson'], true);
+        $features[] = ['type' => 'Feature', 'geometry' => $g,
+                       'properties' => ['code_insee' => $row['code_insee'], 'nom_com' => $row['nom_com']]];
+    }
+    $fc = ['type' => 'FeatureCollection', 'features' => $features];
+    cacheSet($cacheKey, $fc, 3600);
+    Flight::json($fc);
+});
+
+// ── WFS proxy — arrondissements Paris depuis PG ───────────────────────────────
+Flight::route('GET /api/wfs/arrondissements', function () {
+    $cacheKey = 'wfs_arrondissements';
+    $etag     = '"' . md5($cacheKey) . '"';
+    if (isNotModified($etag)) { Flight::halt(304); }
+    $cached = cacheGet($cacheKey);
+    if ($cached !== null) {
+        header('Cache-Control: public, max-age=86400');
+        header('ETag: ' . $etag);
+        Flight::json($cached); return;
+    }
+    $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $hasTable = (int)$db->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name='paris_arrondissements'")->fetchColumn();
+    if (!$hasTable) { Flight::json(['type' => 'FeatureCollection', 'features' => []]); return; }
+    $stmt = $db->query("
+        SELECT code_insee, nom, numero,
+               ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.0001), 4)::text AS geojson
+        FROM paris_arrondissements
+        ORDER BY numero
+    ");
+    $features = [];
+    foreach ($stmt as $row) {
+        $g = json_decode($row['geojson'], true);
+        $features[] = ['type' => 'Feature', 'geometry' => $g,
+                       'properties' => ['code_insee' => $row['code_insee'], 'nom' => $row['nom'], 'numero' => $row['numero']]];
+    }
+    $fc = ['type' => 'FeatureCollection', 'features' => $features];
+    cacheSet($cacheKey, $fc, 86400);
+    header('Cache-Control: public, max-age=86400');
+    header('ETag: ' . $etag);
+    Flight::json($fc);
+});
+
 // ── Prospects coeff localisation ─────────────────────────────────────────
 
 Flight::route('GET /api/prospects', function () {

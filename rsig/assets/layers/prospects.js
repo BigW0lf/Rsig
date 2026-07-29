@@ -229,25 +229,23 @@ function _colorExpression() {
             COLOR_LOW,
         ];
     }
-    // mode commercial (défaut)
+    // mode commercial (défaut) — non attribué = gris
     return ['case',
         ['==', ['get', 'commercial'], 'laurent'],  COM_COLOR.laurent,
         ['==', ['get', 'commercial'], 'mathilde'], COM_COLOR.mathilde,
         ['==', ['get', 'commercial'], 'leo'],      COM_COLOR.leo,
         ['==', ['get', 'commercial'], 'nathalie'], COM_COLOR.nathalie,
-        ['==', ['get', 'statut'], 'contacte'],   STATUT_COLOR.contacte,
-        ['==', ['get', 'statut'], 'en_attente'], STATUT_COLOR.en_attente,
-        ['==', ['get', 'statut'], 'annule'],     STATUT_COLOR.annule,
-        ['==', ['get', 'statut'], 'client'],     STATUT_COLOR.client,
-        ['>=', ['to-number', ['get', 'evol_pct']], 20], COLOR_HIGH,
-        ['>=', ['to-number', ['get', 'evol_pct']], 10], COLOR_MED,
-        COLOR_LOW,
+        '#94a3b8',  // non attribué → gris
     ];
 }
 
 function _applyColorMode() {
     if (!map_ref || !map_ref.getLayer('prospects-circle')) return;
     map_ref.setPaintProperty('prospects-circle', 'circle-color', _colorExpression());
+    if (map_ref.getLayer('prospects-cluster')) {
+        map_ref.setPaintProperty('prospects-cluster', 'circle-color',
+            _colorMode === 'statut' ? '#dc2626' : '#94a3b8');
+    }
     _saveLegend();
 }
 
@@ -288,9 +286,9 @@ function _saveLegend() {
         } else {
             comActifs.forEach(c => { labels.push(COM_LABEL[c]); pal.push(COM_COLOR[c]); });
         }
-        // Ajouter états résiduels (non attribués) si pertinent
+        // Ajouter "Non attribué" en gris si visible
         if (_activeCommerciaux.has('__non_attribue__') || _activeCommerciaux.has('__tous__')) {
-            labels.push('Nouveau'); pal.push(COLOR_HIGH);
+            labels.push('Non attribué'); pal.push('#94a3b8');
         }
         saveLegend('prospects', 'Prospects – par commercial', labels, pal);
     }
@@ -494,7 +492,7 @@ export function initProspects(map) {
                 map.addLayer({ id: 'prospects-cluster', type: 'circle', source: 'prospects-src',
                     filter: ['has', 'point_count'],
                     paint: {
-                        'circle-color': '#dc2626',
+                        'circle-color': _colorMode === 'statut' ? '#dc2626' : '#94a3b8',
                         'circle-radius': ['step', ['get', 'point_count'], 12, 10, 16, 50, 21],
                         'circle-stroke-width': 2, 'circle-stroke-color': 'rgba(255,255,255,.8)',
                     }

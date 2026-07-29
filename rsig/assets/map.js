@@ -1,5 +1,5 @@
 import { debounce } from './utils.js';
-import { updateWfs, initWfsClick } from './wfs.js';
+import { updateWfs, initWfsClick, initCommunesLayer, updateCommunesLayer } from './wfs.js';
 import { applyState, saveState, loadSavedState, readHashState, copyPermalink } from './state.js';
 import { initTaux }     from './layers/taux.js';
 import { initCoeff }    from './layers/coeff.js';
@@ -245,6 +245,7 @@ map.on('load', () => {
         if (tf.isActive())       tf.load();
         if (ta.isActive())       ta.load();
         if (taMajore.isActive()) taMajore.load();
+        updateCommunesLayer(map);
         saveState(map);
     }, 350));
 
@@ -253,8 +254,10 @@ map.on('load', () => {
         if (osm.isActive()) osm.load();
     }, 1200));
 
-    // Initialise les couches vectorielles IGN + dept GeoJSON (no-op sur les moveend suivants)
+    // Initialise les couches vectorielles : cadastral TMS + depts + arrondissements + communes (bbox)
     updateWfs(map);
+    initCommunesLayer(map);
+    updateCommunesLayer(map);
 
     // ── Restaurer l'état (hash URL > localStorage) ───────
     const initState = readHashState() || loadSavedState();

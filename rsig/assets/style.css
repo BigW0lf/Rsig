@@ -438,12 +438,12 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
 .prospect-colormode-row span.cm-active {
     color: var(--text);
 }
-/* Pill slider — gauche=commercial, droite=statut */
+/* Pill slider — gauche=état, droite=commercial */
 .cm-pill {
     position: relative;
     width: 44px;
     height: 22px;
-    background: var(--accent, #2563eb);
+    background: #8b5cf6;
     border-radius: 11px;
     cursor: pointer;
     border: none;
@@ -451,8 +451,8 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
     flex-shrink: 0;
     transition: background .2s;
 }
-.cm-pill[data-mode="statut"] {
-    background: #8b5cf6;
+.cm-pill[data-mode="commercial"] {
+    background: var(--accent, #2563eb);
 }
 .cm-pill::after {
     content: '';
@@ -466,7 +466,7 @@ nav a.active { background: rgba(255,255,255,.2);  color: #fff; font-weight: 600;
     box-shadow: 0 1px 3px rgba(0,0,0,.25);
     transition: transform .2s;
 }
-.cm-pill[data-mode="statut"]::after {
+.cm-pill[data-mode="commercial"]::after {
     transform: translateX(22px);
 }
 

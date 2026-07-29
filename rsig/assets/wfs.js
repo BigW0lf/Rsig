@@ -70,9 +70,8 @@ const style = {
 };
 
 // ── IGN TMS raster ────────────────────────────────────────────────────────────
-// Cadastral Express PNG — communes (z9-14), sections+parcelles (z14+)
+// Cadastral Express PNG — sections+parcelles (z13+) uniquement
 const IGN_CADASTRAL_TMS = 'https://data.geopf.fr/tms/1.0.0/CADASTRALPARCELS.PARCELLAIRE_EXPRESS/{z}/{x}/{y}.png';
-const IGN_LIMITES_TMS   = 'https://data.geopf.fr/tms/1.0.0/LIMITES_ADMINISTRATIVES_EXPRESS.LATEST/{z}/{x}/{y}.png';
 
 // Pour le clic WFS (info popup uniquement, pas de rendu vectoriel)
 const typeNames = {
@@ -95,21 +94,7 @@ export function updateWfs(map) {
     if (_initialized) return;
     _initialized = true;
 
-    // 1. Limites admin (depts/communes) + noms de villes en raster
-    map.addSource('ign-limites', {
-        type: 'raster',
-        tiles: [IGN_LIMITES_TMS],
-        tileSize: 256,
-        minzoom: 6,
-        maxzoom: 13,
-        attribution: '© IGN',
-    });
-    map.addLayer({ id: 'wfs-limites-raster', type: 'raster', source: 'ign-limites',
-        maxzoom: 13,
-        paint: { 'raster-opacity': 0.6 },
-    });
-
-    // 2. Parcellaire (sections + parcelles) en raster à partir de z13
+    // 1. Parcellaire (sections + parcelles) en raster à partir de z13
     map.addSource('ign-cadastral', {
         type: 'raster',
         tiles: [IGN_CADASTRAL_TMS],
@@ -123,8 +108,9 @@ export function updateWfs(map) {
         paint: { 'raster-opacity': 0.7 },
     });
 
-    // 3. Départements : GeoJSON proxy local (cache 24h, ~200 KB)
+    // 2. Limites vectorielles locales : depts (chargé une fois) + communes/arrond dynamiques par bbox
     _fetchDept(map);
+    _fetchArrondissements(map);
 }
 
 function _fetchDept(map) {
@@ -134,15 +120,108 @@ function _fetchDept(map) {
         .then(data => {
             hideSpinner();
             if (!data?.features) return;
-            // Source invisible uniquement pour le clic — le rendu vient du TMS raster
             map.addSource('wfs-dept-src', { type: 'geojson', data });
             map.addLayer({
                 id: 'wfs-dept-fill', type: 'fill', source: 'wfs-dept-src',
                 maxzoom: 9,
                 paint: { 'fill-color': '#000000', 'fill-opacity': 0 },
             });
+            // Contours départements visibles z6-10
+            map.addLayer({
+                id: 'wfs-dept-line', type: 'line', source: 'wfs-dept-src',
+                minzoom: 4, maxzoom: 10,
+                paint: { 'line-color': '#003189', 'line-width': 1, 'line-opacity': 0.5 },
+            });
+            // Labels départements z6-9
+            map.addLayer({
+                id: 'wfs-dept-label', type: 'symbol', source: 'wfs-dept-src',
+                minzoom: 6, maxzoom: 9,
+                layout: {
+                    'text-field': ['get', 'nom_officiel'],
+                    'text-font': ['Noto Sans Regular'],
+                    'text-size': 11,
+                    'text-max-width': 8,
+                },
+                paint: { 'text-color': '#003189', 'text-halo-color': 'rgba(255,255,255,0.8)', 'text-halo-width': 1.5 },
+            });
         })
         .catch(() => hideSpinner());
+}
+
+export function initCommunesLayer(map) {
+    const EMPTY = { type: 'FeatureCollection', features: [] };
+    map.addSource('wfs-communes-src', { type: 'geojson', data: EMPTY });
+    map.addLayer({
+        id: 'wfs-communes-fill', type: 'fill', source: 'wfs-communes-src',
+        minzoom: 9, maxzoom: 14,
+        paint: { 'fill-color': '#000000', 'fill-opacity': 0 },
+    });
+    map.addLayer({
+        id: 'wfs-communes-line', type: 'line', source: 'wfs-communes-src',
+        minzoom: 9, maxzoom: 14,
+        paint: { 'line-color': '#7a8fbb', 'line-width': 0.6, 'line-opacity': 0.7 },
+    });
+    map.addLayer({
+        id: 'wfs-communes-label', type: 'symbol', source: 'wfs-communes-src',
+        minzoom: 11, maxzoom: 14,
+        layout: {
+            'text-field': ['get', 'nom_com'],
+            'text-font': ['Noto Sans Regular'],
+            'text-size': 10,
+            'text-max-width': 6,
+        },
+        paint: { 'text-color': '#4a5568', 'text-halo-color': 'rgba(255,255,255,0.8)', 'text-halo-width': 1.2 },
+    });
+}
+
+let _communesCtrl = null;
+let _communesLastBbox = null;
+
+export function updateCommunesLayer(map) {
+    const zoom = map.getZoom();
+    if (zoom < 9 || zoom >= 14) return;
+    const b = map.getBounds();
+    const bkey = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => v.toFixed(2)).join(',');
+    if (bkey === _communesLastBbox) return;
+    _communesLastBbox = bkey;
+    if (_communesCtrl) _communesCtrl.abort();
+    _communesCtrl = new AbortController();
+    const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
+    const url = '/api/wfs/communes-bbox?bbox=' + encodeURIComponent(bbox);
+    fetch(url, { signal: _communesCtrl.signal })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (!data?.features) return;
+            map.getSource('wfs-communes-src')?.setData(data);
+        })
+        .catch(() => {});
+}
+
+function _fetchArrondissements(map) {
+    fetch('/api/wfs/arrondissements')
+        .then(r => { if (!r.ok) throw new Error('arrond ' + r.status); return r.json(); })
+        .then(data => {
+            if (!data?.features?.length) return;
+            map.addSource('wfs-arrond-src', { type: 'geojson', data });
+            // Contours arrondissements z13+
+            map.addLayer({
+                id: 'wfs-arrond-line', type: 'line', source: 'wfs-arrond-src',
+                minzoom: 12,
+                paint: { 'line-color': '#7a8fbb', 'line-width': 0.8, 'line-opacity': 0.8 },
+            });
+            // Labels arrondissements z13+
+            map.addLayer({
+                id: 'wfs-arrond-label', type: 'symbol', source: 'wfs-arrond-src',
+                minzoom: 13,
+                layout: {
+                    'text-field': ['concat', ['get', 'numero'], 'e'],
+                    'text-font': ['Noto Sans Regular'],
+                    'text-size': 10,
+                },
+                paint: { 'text-color': '#4a5568', 'text-halo-color': 'rgba(255,255,255,0.8)', 'text-halo-width': 1.2 },
+            });
+        })
+        .catch(() => {});
 }
 
 // ── Clic carte → requête WFS ponctuelle IGN (info popup) ─────────────────────
@@ -168,7 +247,16 @@ export function initWfsClick(map) {
             return;
         }
 
-        // Communes / sections / parcelles : WFS ponctuel IGN
+        // Communes : GeoJSON local si disponible, sinon WFS IGN
+        if (type === 'communes') {
+            const feats = map.queryRenderedFeatures(e.point, { layers: ['wfs-communes-fill'] });
+            if (feats.length) {
+                await _showPopup(e.lngLat, 'communes', feats[0].properties);
+                return;
+            }
+        }
+
+        // Sections / parcelles (et communes en fallback) : WFS ponctuel IGN
         if (_ctrl) _ctrl.abort();
         _ctrl = new AbortController();
         const lng = e.lngLat.lng;

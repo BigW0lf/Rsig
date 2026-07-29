@@ -521,9 +521,9 @@ kbd {
                 </div>
                 <input type="hidden" id="prospects-colormode" value="commercial">
                 <div class="prospect-colormode-row">
-                    <span class="cm-active" id="cm-label-commercial">Commercial</span>
-                    <button class="cm-pill" id="cm-toggle" data-mode="commercial" title="Basculer l'affichage"></button>
                     <span id="cm-label-statut">État</span>
+                    <button class="cm-pill" id="cm-toggle" data-mode="commercial" title="Basculer l'affichage"></button>
+                    <span class="cm-active" id="cm-label-commercial">Commercial</span>
                 </div>
                 <div class="prospect-filter-dual">
                     <div>
