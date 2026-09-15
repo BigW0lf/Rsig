@@ -134,7 +134,11 @@ Flight::route('POST /api/db/online', function () {
 
 // ── Sync CRM → miroir PostgreSQL (lance en arrière-plan) ──
 Flight::route('POST /api/crm/sync', function () {
-    $db = getDb();
+    $forceFull = (Flight::request()->data->force_full === 'true' || Flight::request()->data->force_full === true);
+    _launchCrmWorker(getDb(), $forceFull);
+});
+
+function _launchCrmWorker(?PDO $db, bool $forceFull): void {
     if (!$db) { Flight::json(['error' => 'Base non disponible'], 503); return; }
 
     // Marquer les syncs bloquées (running depuis >30 min) comme erreur
@@ -154,17 +158,18 @@ Flight::route('POST /api/crm/sync', function () {
     $php    = PHP_CLI_PATH;
     $worker = realpath(__DIR__ . '/../sync_worker.php');
     $ini    = PHP_INI_PATH;
+    $mode   = $forceFull ? 'full' : 'incremental';
     if (PHP_OS_FAMILY === 'Windows') {
-        $cmd = '"' . $php . '"' . ($ini ? ' -c "' . $ini . '"' : '') . ' "' . $worker . '" ' . $logId . ' >NUL 2>&1';
+        $cmd = '"' . $php . '"' . ($ini ? ' -c "' . $ini . '"' : '') . ' "' . $worker . '" ' . $logId . ' ' . $mode . ' >NUL 2>&1';
         pclose(popen('start "" /B ' . $cmd, 'r'));
     } else {
         // nohup + setsid pour détacher le process du groupe Apache et éviter qu'il soit tué
-        $cmd = 'nohup setsid ' . escapeshellarg($php) . ' ' . escapeshellarg($worker) . ' ' . $logId . ' >/dev/null 2>&1 &';
+        $cmd = 'nohup setsid ' . escapeshellarg($php) . ' ' . escapeshellarg($worker) . ' ' . $logId . ' ' . $mode . ' >/dev/null 2>&1 &';
         shell_exec($cmd);
     }
 
-    Flight::json(['status' => 'started', 'log_id' => $logId]);
-});
+    Flight::json(['status' => 'started', 'log_id' => $logId, 'mode' => $mode]);
+}
 
 // ── Reset sync coincée (running) ─────────────────────────
 Flight::route('POST /api/crm/sync/reset', function () {

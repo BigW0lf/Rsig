@@ -65,9 +65,11 @@
         .meta-url { color:var(--text3); font-size:0.75rem; word-break:break-all; }
         #bofip-spinner { display:none; color:var(--text3); font-size:0.82rem; padding:4px 0; }
 
-        /* ── Danger button ── */
-        .btn-danger { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+        /* ── Danger / secondary buttons ── */
+        .btn-danger    { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
         .btn-danger:hover { background:#fecaca; }
+        .btn-secondary { background:var(--surface2); color:var(--text2); }
+        .btn-secondary:hover { background:var(--border); }
 
         /* ── TA ── */
         .log-output { background:#1a2332; color:#a5f3fc; font-family:monospace; font-size:0.75rem;
@@ -128,7 +130,8 @@
                 <div class="progress-bar" id="crm-progress-bar"></div>
             </div>
             <button class="btn btn-danger" id="btn-crm-reset" style="display:none" onclick="resetCrmSync()">⚠ Forcer la réinitialisation</button>
-            <button class="btn" id="btn-crm-sync">↻ Synchroniser depuis Dynamics</button>
+            <button class="btn btn-secondary" id="btn-crm-full" onclick="lancerSyncCrm(true)">↻ Sync complète</button>
+            <button class="btn" id="btn-crm-sync" onclick="lancerSyncCrm(false)">↻ Sync incrémentale</button>
         </div>
 
         <div class="alert alert-info"  id="crm-info"  style="display:none"></div>
@@ -316,7 +319,9 @@ function startCrmPolling() {
             if (s === 'ok' || s === 'error') {
                 clearInterval(crmPoll); crmPoll = null;
                 const btn = document.getElementById('btn-crm-sync');
-                btn.disabled = false; btn.textContent = '↻ Synchroniser depuis Dynamics';
+                const btnF = document.getElementById('btn-crm-full');
+                btn.disabled = false; btn.textContent = '↻ Sync incrémentale';
+                btnF.disabled = false;
                 document.getElementById('crm-progress-wrap').style.display = 'none';
                 if (s === 'ok') {
                     const el = document.getElementById('crm-info');
@@ -333,30 +338,33 @@ function startCrmPolling() {
     }, 30000);
 }
 
-document.getElementById('btn-crm-sync').addEventListener('click', () => {
-    const btn  = document.getElementById('btn-crm-sync');
+function lancerSyncCrm(forceFull) {
+    if (forceFull && !confirm('Sync complète : tous les dossiers Dynamics seront rechargés (~5 min). Confirmer ?')) return;
+    const btnSync = document.getElementById('btn-crm-sync');
+    const btnFull = document.getElementById('btn-crm-full');
     const info = document.getElementById('crm-info');
     const err  = document.getElementById('crm-error');
     const bar  = document.getElementById('crm-progress-bar');
     const wrap = document.getElementById('crm-progress-wrap');
-    btn.disabled = true; btn.textContent = '↻ Démarrage…';
+    btnSync.disabled = true; btnFull.disabled = true;
+    btnSync.textContent = '↻ Démarrage…';
     info.style.display = 'none'; err.style.display = 'none';
 
-    fetch('/api/crm/sync', { method:'POST' })
+    fetch('/api/crm/sync', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({force_full: forceFull ? 'true' : 'false'}) })
     .then(r=>r.json())
     .then(d=>{
-        if (d.error) { err.textContent='Erreur : '+d.error; err.style.display='block'; btn.disabled=false; btn.textContent='↻ Synchroniser depuis Dynamics'; return; }
-        btn.textContent = '↻ Sync en cours…';
-        info.textContent = 'Synchronisation lancée en arrière-plan (géocodage inclus, ~1-3 min).';
+        if (d.error) { err.textContent='Erreur : '+d.error; err.style.display='block'; btnSync.disabled=false; btnFull.disabled=false; btnSync.textContent='↻ Sync incrémentale'; return; }
+        btnSync.textContent = forceFull ? '↻ Sync complète en cours…' : '↻ Sync en cours…';
+        info.textContent = forceFull ? 'Sync complète lancée (~5 min).' : 'Sync incrémentale lancée (~1-2 min).';
         info.style.display = 'block';
         wrap.style.display = 'block';
         let pct = 0;
         const anim = setInterval(() => { pct = Math.min(pct+0.5, 85); bar.style.width = pct+'%'; }, 1000);
-        setTimeout(() => clearInterval(anim), 300000);
+        setTimeout(() => clearInterval(anim), 600000);
         startCrmPolling();
     })
-    .catch(e=>{ err.textContent='Erreur réseau : '+e.message; err.style.display='block'; btn.disabled=false; btn.textContent='↻ Synchroniser depuis Dynamics'; });
-});
+    .catch(e=>{ err.textContent='Erreur réseau : '+e.message; err.style.display='block'; btnSync.disabled=false; btnFull.disabled=false; btnSync.textContent='↻ Sync incrémentale'; });
+}
 
 function resetCrmSync() {
     if (!confirm('Réinitialiser la sync coincée ? Elle sera marquée en erreur et tu pourras en relancer une nouvelle.')) return;

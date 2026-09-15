@@ -14,15 +14,21 @@
  *  - tous les autres champs mis à jour si modifiedon a changé
  */
 
-function crmSync(PDO $db): array {
+function crmSync(PDO $db, bool $forceFull = false): array {
     $log = ['dossiers' => 0, 'errors' => []];
 
     $token = getAccessToken();
     if (!$token) throw new \RuntimeException("Impossible d'obtenir un token Dataverse");
 
-    // Filtre incrémental sur modifiedon
-    $lastOk = $db->query("SELECT MAX(started_at) FROM crm_sync_log WHERE status='ok'")->fetchColumn();
-    $since  = $lastOk ? '&$filter=modifiedon gt ' . date('Y-m-d\TH:i:s\Z', strtotime($lastOk)) : '';
+    // Filtre incrémental sur modifiedon (encodé %20 pour OData — espaces bruts rejetés silencieusement)
+    $since = '';
+    if (!$forceFull) {
+        $lastOk = $db->query("SELECT MAX(finished_at) FROM crm_sync_log WHERE status='ok'")->fetchColumn();
+        if ($lastOk) {
+            $dt    = date('Y-m-d\TH:i:s\Z', strtotime($lastOk));
+            $since = '&$filter=modifiedon%20gt%20' . $dt;
+        }
+    }
 
     // ── Migration DDL (hors transaction) ─────────────────────────────────────
     $db->exec("CREATE TABLE IF NOT EXISTS crm_dossiers (

@@ -3,7 +3,8 @@
  * Worker de synchronisation CRM — lancé en arrière-plan par /api/crm/sync
  * Usage : php sync_worker.php <log_id>
  */
-$logId = (int)($argv[1] ?? 0);
+$logId     = (int)($argv[1] ?? 0);
+$forceFull = ($argv[2] ?? '') === 'full';
 if (!$logId) exit(1);
 
 require __DIR__ . '/../config.php';
@@ -20,7 +21,7 @@ $db = new PDO(DB_DSN, DB_USER, DB_PASS, [
 ]);
 
 try {
-    $result = crmSync($db);
+    $result = crmSync($db, $forceFull);
 
     $db->prepare("UPDATE crm_sync_log SET finished_at=now(), status='ok',
                   dossiers_count=:d, message=:m WHERE id=:id")
