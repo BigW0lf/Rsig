@@ -158,7 +158,8 @@ Flight::route('POST /api/crm/sync', function () {
         $cmd = '"' . $php . '"' . ($ini ? ' -c "' . $ini . '"' : '') . ' "' . $worker . '" ' . $logId . ' >NUL 2>&1';
         pclose(popen('start "" /B ' . $cmd, 'r'));
     } else {
-        $cmd = escapeshellarg($php) . ' ' . escapeshellarg($worker) . ' ' . $logId . ' >/dev/null 2>&1 &';
+        // nohup + setsid pour détacher le process du groupe Apache et éviter qu'il soit tué
+        $cmd = 'nohup setsid ' . escapeshellarg($php) . ' ' . escapeshellarg($worker) . ' ' . $logId . ' >/dev/null 2>&1 &';
         shell_exec($cmd);
     }
 
