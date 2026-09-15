@@ -164,7 +164,8 @@ function _launchCrmWorker(?PDO $db, bool $forceFull): void {
         pclose(popen('start "" /B ' . $cmd, 'r'));
     } else {
         // nohup + setsid pour détacher le process du groupe Apache et éviter qu'il soit tué
-        $cmd = 'nohup setsid ' . escapeshellarg($php) . ' ' . escapeshellarg($worker) . ' ' . $logId . ' ' . $mode . ' >/dev/null 2>&1 &';
+        $logFile = sys_get_temp_dir() . '/crm_worker_' . $logId . '.log';
+        $cmd = 'nohup setsid ' . escapeshellarg($php) . ' ' . escapeshellarg($worker) . ' ' . $logId . ' ' . $mode . ' >' . escapeshellarg($logFile) . ' 2>&1 &';
         shell_exec($cmd);
     }
 
@@ -189,11 +190,18 @@ Flight::route('GET /api/crm/sync/status', function () {
     $countd = $hasDos ? (int)$db->query("SELECT COUNT(*) FROM crm_dossiers")->fetchColumn() : 0;
     $hasAcc = (int)$db->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name='crm_accounts'")->fetchColumn();
     $counta = $hasAcc ? (int)$db->query("SELECT COUNT(*) FROM crm_accounts")->fetchColumn() : 0;
+    // Log worker si dispo
+    $workerLog = null;
+    if ($row && $row['status'] === 'running') {
+        $logFile = sys_get_temp_dir() . '/crm_worker_' . $row['id'] . '.log';
+        if (file_exists($logFile)) $workerLog = file_get_contents($logFile);
+    }
     Flight::json([
         'last_sync'      => $row ?: null,
         'sites_in_db'    => $countd,
         'dossiers_in_db' => $countd,
         'accounts_in_db' => $counta,
+        'worker_log'     => $workerLog,
     ]);
 });
 

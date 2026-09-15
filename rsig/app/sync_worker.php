@@ -12,8 +12,8 @@ require __DIR__ . '/helpers.php';
 require __DIR__ . '/dynamics.php';
 require __DIR__ . '/crm_sync.php';
 
-set_time_limit(0);   // la sync peut prendre plusieurs minutes
-ini_set('memory_limit', '256M');
+set_time_limit(0);
+ini_set('memory_limit', '512M');
 
 $db = new PDO(DB_DSN, DB_USER, DB_PASS, [
     PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
