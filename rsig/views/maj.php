@@ -65,6 +65,10 @@
         .meta-url { color:var(--text3); font-size:0.75rem; word-break:break-all; }
         #bofip-spinner { display:none; color:var(--text3); font-size:0.82rem; padding:4px 0; }
 
+        /* ── Danger button ── */
+        .btn-danger { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+        .btn-danger:hover { background:#fecaca; }
+
         /* ── TA ── */
         .log-output { background:#1a2332; color:#a5f3fc; font-family:monospace; font-size:0.75rem;
                       border-radius:var(--radius); padding:12px; max-height:180px; overflow-y:auto;
@@ -123,6 +127,7 @@
             <div class="progress-bar-wrap" id="crm-progress-wrap">
                 <div class="progress-bar" id="crm-progress-bar"></div>
             </div>
+            <button class="btn btn-danger" id="btn-crm-reset" style="display:none" onclick="resetCrmSync()">⚠ Forcer la réinitialisation</button>
             <button class="btn" id="btn-crm-sync">↻ Synchroniser depuis Dynamics</button>
         </div>
 
@@ -294,9 +299,10 @@ function loadCrmStatus() {
             const dt = new Date(d.last_sync.finished_at || d.last_sync.started_at);
             document.getElementById('crm-date').textContent = isNaN(dt) ? '—' : dt.toLocaleString('fr-FR');
             const st = document.getElementById('crm-status');
-            if (d.last_sync.status === 'ok') { st.textContent='OK'; st.className='badge badge-ok'; }
-            else if (d.last_sync.status === 'error') { st.textContent='Erreur'; st.className='badge badge-warn'; }
-            else { st.textContent='En cours…'; st.className='badge badge-pending'; }
+            const resetBtn = document.getElementById('btn-crm-reset');
+            if (d.last_sync.status === 'ok') { st.textContent='OK'; st.className='badge badge-ok'; resetBtn.style.display='none'; }
+            else if (d.last_sync.status === 'error') { st.textContent='Erreur'; st.className='badge badge-warn'; resetBtn.style.display='none'; }
+            else { st.textContent='En cours…'; st.className='badge badge-pending'; resetBtn.style.display=''; }
             if (d.last_sync.status === 'running') startCrmPolling();
         }
     }).catch(()=>{});
@@ -351,6 +357,16 @@ document.getElementById('btn-crm-sync').addEventListener('click', () => {
     })
     .catch(e=>{ err.textContent='Erreur réseau : '+e.message; err.style.display='block'; btn.disabled=false; btn.textContent='↻ Synchroniser depuis Dynamics'; });
 });
+
+function resetCrmSync() {
+    if (!confirm('Réinitialiser la sync coincée ? Elle sera marquée en erreur et tu pourras en relancer une nouvelle.')) return;
+    fetch('/api/crm/sync/reset', { method:'POST' })
+    .then(r=>r.json()).then(d=>{
+        document.getElementById('btn-crm-reset').style.display = 'none';
+        clearInterval(crmPoll); crmPoll = null;
+        loadCrmStatus();
+    }).catch(()=>{});
+}
 
 loadCrmStatus();
 

@@ -165,6 +165,15 @@ Flight::route('POST /api/crm/sync', function () {
     Flight::json(['status' => 'started', 'log_id' => $logId]);
 });
 
+// ── Reset sync coincée (running) ─────────────────────────
+Flight::route('POST /api/crm/sync/reset', function () {
+    requireAdmin();
+    $db = getDb();
+    if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $affected = $db->exec("UPDATE crm_sync_log SET finished_at=now(), status='error', message='Réinitialisé manuellement' WHERE status='running'");
+    Flight::json(['reset' => $affected]);
+});
+
 // ── Statut dernière sync ──────────────────────────────────
 Flight::route('GET /api/crm/sync/status', function () {
     $db = getDb();
