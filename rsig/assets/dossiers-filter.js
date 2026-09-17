@@ -26,24 +26,30 @@ const AC_TEXT_FIELDS = new Set(['client_name', 'ville', 'rtx_code']);
 
 const OPERATORS = {
     text:   [
-        { value: 'contains',   label: 'contient' },
-        { value: 'startswith', label: 'commence par' },
-        { value: 'exact',      label: 'est exactement' },
+        { value: 'contains',       label: 'contient' },
+        { value: 'not_contains',   label: 'ne contient pas' },
+        { value: 'startswith',     label: 'commence par' },
+        { value: 'not_startswith', label: 'ne commence pas par' },
+        { value: 'exact',          label: 'est exactement' },
+        { value: 'not_exact',      label: 'est différent de' },
     ],
     number: [
         { value: 'eq',  label: '=' },
+        { value: 'neq', label: '≠' },
         { value: 'gt',  label: '>' },
         { value: 'lt',  label: '<' },
         { value: 'gte', label: '>=' },
         { value: 'lte', label: '<=' },
     ],
     date: [
+        { value: 'on',      label: 'le' },
         { value: 'after',   label: 'après le' },
         { value: 'before',  label: 'avant le' },
         { value: 'between', label: 'entre' },
     ],
     select: [
-        { value: 'exact', label: 'est' },
+        { value: 'exact',     label: 'est' },
+        { value: 'not_exact', label: 'est différent de' },
     ],
 };
 
@@ -67,9 +73,12 @@ function matchRule(props, rule) {
     if (fieldDef.type === 'text') {
         const val  = (raw ?? '').toString().toLowerCase();
         const term = (rule.value ?? '').toLowerCase();
-        if (op === 'contains')   return val.includes(term);
-        if (op === 'startswith') return val.startsWith(term);
-        if (op === 'exact')      return val === term;
+        if (op === 'contains')       return val.includes(term);
+        if (op === 'not_contains')   return !val.includes(term);
+        if (op === 'startswith')     return val.startsWith(term);
+        if (op === 'not_startswith') return !val.startsWith(term);
+        if (op === 'exact')          return val === term;
+        if (op === 'not_exact')      return val !== term;
         return true;
     }
 
@@ -78,6 +87,7 @@ function matchRule(props, rule) {
         const ref = parseFloat(rule.value);
         if (!isFinite(num) || !isFinite(ref)) return true;
         if (op === 'eq')  return num === ref;
+        if (op === 'neq') return num !== ref;
         if (op === 'gt')  return num > ref;
         if (op === 'lt')  return num < ref;
         if (op === 'gte') return num >= ref;
@@ -89,6 +99,10 @@ function matchRule(props, rule) {
         if (!raw) return true;
         const d = new Date(raw);
         if (isNaN(d)) return true;
+        if (op === 'on') {
+            const ref = new Date(rule.value);
+            return d.toDateString() === ref.toDateString();
+        }
         if (op === 'after')  return d > new Date(rule.value);
         if (op === 'before') return d < new Date(rule.value);
         if (op === 'between') {
@@ -100,7 +114,9 @@ function matchRule(props, rule) {
     }
 
     if (fieldDef.type === 'select') {
-        return (raw ?? '') === rule.value;
+        if (op === 'exact')     return (raw ?? '') === rule.value;
+        if (op === 'not_exact') return (raw ?? '') !== rule.value;
+        return true;
     }
 
     return true;
