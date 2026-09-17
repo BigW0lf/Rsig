@@ -278,12 +278,11 @@ Flight::route('GET /api/crm/geojson', function () {
     $table    = $count > 0 ? 'main' : 'fallback';
     $cacheKey = 'crm_geojson_' . $table . ($b ? '_' . md5(implode(',', $b)) : '');
     $ttl      = $b ? 60 : 300;
-    $etag     = '"' . md5($cacheKey) . '"';
-
-    if (isNotModified($etag)) { Flight::halt(304); }
 
     $cached = cacheGet($cacheKey);
     if ($cached !== null) {
+        $etag = '"' . md5(json_encode($cached)) . '"';
+        if (isNotModified($etag)) { Flight::halt(304); }
         header('Cache-Control: private, max-age=' . $ttl);
         header('ETag: ' . $etag);
         Flight::json($cached); return;
@@ -300,6 +299,7 @@ Flight::route('GET /api/crm/geojson', function () {
     }
     $fc = ['type'=>'FeatureCollection','features'=>$features];
     cacheSet($cacheKey, $fc, $ttl);
+    $etag = '"' . md5(json_encode($fc)) . '"';
     header('Cache-Control: private, max-age=' . $ttl);
     header('ETag: ' . $etag);
     Flight::json($fc);
@@ -390,6 +390,7 @@ Flight::route('GET /api/communes/search', function () {
 
 // ── Diagnostic ────────────────────────────────────────────
 Flight::route('GET /api/db-check', function () {
+    requireAdmin();
     $info = [
         'pdo_drivers'   => PDO::getAvailableDrivers(),
         'pgsql_loaded'  => extension_loaded('pdo_pgsql'),
@@ -418,8 +419,6 @@ Flight::route('GET /search', function () {
         CURLOPT_TIMEOUT        => 10,
         CURLOPT_HTTPHEADER     => ['Accept: application/json'],
         CURLOPT_USERAGENT      => 'Mozilla/5.0',
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => false,
     ]);
     $raw = curl_exec($ch);
     $curlErr = curl_error($ch);
@@ -537,8 +536,7 @@ Flight::route('POST /api/upload-csv', function () {
 // ── NiFi status ───────────────────────────────────────────
 Flight::route('GET /api/nifi/status', function () {
     $ch = curl_init(NIFI_BASE . '/nifi-api/system-diagnostics');
-    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 5,
-                            CURLOPT_SSL_VERIFYPEER => false, CURLOPT_SSL_VERIFYHOST => false]);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 5]);
     curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $err  = curl_error($ch);
@@ -618,10 +616,10 @@ Flight::route('GET /api/taux/departements', function () {
 // ── WFS proxy — départements depuis PG (remplace fetch IGN 33MB) ─────────────
 Flight::route('GET /api/wfs/departements', function () {
     $cacheKey = 'wfs_departements';
-    $etag     = '"' . md5($cacheKey) . '"';
-    if (isNotModified($etag)) { Flight::halt(304); }
     $cached = cacheGet($cacheKey);
     if ($cached !== null) {
+        $etag = '"' . md5(json_encode($cached)) . '"';
+        if (isNotModified($etag)) { Flight::halt(304); }
         header('Cache-Control: public, max-age=86400');
         header('ETag: ' . $etag);
         Flight::json($cached); return;
@@ -641,6 +639,7 @@ Flight::route('GET /api/wfs/departements', function () {
     }
     $fc = ['type' => 'FeatureCollection', 'features' => $features];
     cacheSet($cacheKey, $fc, 86400);
+    $etag = '"' . md5(json_encode($fc)) . '"';
     header('Cache-Control: public, max-age=86400');
     header('ETag: ' . $etag);
     Flight::json($fc);
@@ -649,10 +648,10 @@ Flight::route('GET /api/wfs/departements', function () {
 // ── WFS proxy — communes depuis PG (simplifié, pour fond de carte) ───────────
 Flight::route('GET /api/wfs/communes', function () {
     $cacheKey = 'wfs_communes';
-    $etag     = '"' . md5($cacheKey) . '"';
-    if (isNotModified($etag)) { Flight::halt(304); }
     $cached = cacheGet($cacheKey);
     if ($cached !== null) {
+        $etag = '"' . md5(json_encode($cached)) . '"';
+        if (isNotModified($etag)) { Flight::halt(304); }
         header('Cache-Control: public, max-age=86400');
         header('ETag: ' . $etag);
         Flight::json($cached); return;
@@ -672,6 +671,7 @@ Flight::route('GET /api/wfs/communes', function () {
     }
     $fc = ['type' => 'FeatureCollection', 'features' => $features];
     cacheSet($cacheKey, $fc, 86400);
+    $etag = '"' . md5(json_encode($fc)) . '"';
     header('Cache-Control: public, max-age=86400');
     header('ETag: ' . $etag);
     Flight::json($fc);
@@ -710,10 +710,10 @@ Flight::route('GET /api/wfs/communes-bbox', function () {
 // ── WFS proxy — arrondissements Paris depuis PG ───────────────────────────────
 Flight::route('GET /api/wfs/arrondissements', function () {
     $cacheKey = 'wfs_arrondissements';
-    $etag     = '"' . md5($cacheKey) . '"';
-    if (isNotModified($etag)) { Flight::halt(304); }
     $cached = cacheGet($cacheKey);
     if ($cached !== null) {
+        $etag = '"' . md5(json_encode($cached)) . '"';
+        if (isNotModified($etag)) { Flight::halt(304); }
         header('Cache-Control: public, max-age=86400');
         header('ETag: ' . $etag);
         Flight::json($cached); return;
@@ -735,6 +735,7 @@ Flight::route('GET /api/wfs/arrondissements', function () {
     }
     $fc = ['type' => 'FeatureCollection', 'features' => $features];
     cacheSet($cacheKey, $fc, 86400);
+    $etag = '"' . md5(json_encode($fc)) . '"';
     header('Cache-Control: public, max-age=86400');
     header('ETag: ' . $etag);
     Flight::json($fc);
@@ -2126,12 +2127,11 @@ Flight::route('GET /api/tarifs/departements', function () {
     }
     $annee  = validateAnnee(Flight::request()->query['annee'] ?? '');
     $cacheKey = 'tarifs_dep_' . $cat . '_' . $annee;
-    $etag     = '"' . md5($cacheKey) . '"';
-
-    if (isNotModified($etag)) { Flight::halt(304); }
 
     $cached = cacheGet($cacheKey);
     if ($cached !== null) {
+        $etag = '"' . md5(json_encode($cached)) . '"';
+        if (isNotModified($etag)) { Flight::halt(304); }
         header('Cache-Control: public, max-age=86400');
         header('ETag: ' . $etag);
         Flight::json($cached); return;
@@ -2152,6 +2152,7 @@ Flight::route('GET /api/tarifs/departements', function () {
     $stmt->execute();
     $fc = ['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)];
     cacheSet($cacheKey, $fc, 3600);
+    $etag = '"' . md5(json_encode($fc)) . '"';
     header('Cache-Control: public, max-age=86400');
     header('ETag: ' . $etag);
     Flight::json($fc);

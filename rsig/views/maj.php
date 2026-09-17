@@ -492,9 +492,9 @@ function loadTsbStats() {
         const tbody = document.getElementById('tsb-stats-body');
         if (!circRows.length) { tbody.innerHTML='<tr><td colspan="9" style="color:var(--text3);text-align:center">Aucun millésime</td></tr>'; return; }
         tbody.innerHTML = circRows.map(r=>`<tr>
-            <td>${r.millesime}</td><td>${r.idf_c1}</td><td>${r.idf_c2}</td>
-            <td style="color:var(--text2)">${r.idf_2bis}</td><td>${r.idf_c3}</td><td>${r.idf_c4}</td>
-            <td style="color:var(--text2)">${r.idf_dcsucs_derog}</td><td>${r.paca_total}</td>
+            <td>${escHtml(r.millesime)}</td><td>${escHtml(r.idf_c1)}</td><td>${escHtml(r.idf_c2)}</td>
+            <td style="color:var(--text2)">${escHtml(r.idf_2bis)}</td><td>${escHtml(r.idf_c3)}</td><td>${escHtml(r.idf_c4)}</td>
+            <td style="color:var(--text2)">${escHtml(r.idf_dcsucs_derog)}</td><td>${escHtml(r.paca_total)}</td>
             <td>${tarifsSet.has(+r.millesime) ? '<span style="color:#166534">✓</span>' : '<span style="color:var(--text3)">–</span>'}</td>
         </tr>`).join('');
     }).catch(()=>{});

@@ -1,7 +1,10 @@
 <?php
 
 function authStart(): void {
-    if (session_status() === PHP_SESSION_NONE) session_start();
+    if (session_status() === PHP_SESSION_NONE) {
+        session_set_cookie_params(['samesite' => 'Strict', 'secure' => true, 'httponly' => true, 'path' => '/']);
+        session_start();
+    }
 }
 
 function isAuthenticated(): bool {
@@ -37,6 +40,15 @@ function requireAdmin(): void {
 function requireAuth(): void {
     if (!AUTH_ENABLED) return;
     if (isAuthenticated()) return;
+    // Pour les appels XHR/API : 401 JSON plutôt qu'une redirection vers Microsoft
+    $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
+    $uri    = $_SERVER['REQUEST_URI'] ?? '';
+    if (str_contains($accept, 'application/json') || str_starts_with($uri, '/api/')) {
+        http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Non authentifié', 'login_url' => '/']);
+        exit;
+    }
     authStart();
     $state = bin2hex(random_bytes(16));
     $_SESSION['oauth_state'] = $state;
@@ -99,6 +111,7 @@ function handleAuthCallback(): void {
         http_response_code(403); echo 'Accès refusé : compte non autorisé.'; exit;
     }
 
+    session_regenerate_id(true);
     $_SESSION['user_tid']   = $payload['tid'];
     $_SESSION['user_name']  = $payload['name']              ?? $payload['preferred_username'] ?? 'Inconnu';
     $_SESSION['user_email'] = $payload['preferred_username'] ?? $payload['email']             ?? '';

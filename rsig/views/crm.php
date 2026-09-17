@@ -277,6 +277,7 @@ document.getElementById('btn-sync').addEventListener('click', () => {
 // ── Tableau dossiers (depuis miroir local) ────────────────
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('fr-FR') : '—'; }
 function fmtEur(v)  { return v ? (+v).toLocaleString('fr-FR') + ' €' : '—'; }
+function _esc(v)    { return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function runQuery(sql, onData, onEmpty, onError) {
     fetch('/api/query', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({sql}) })
@@ -297,12 +298,12 @@ document.getElementById('load-dossiers').addEventListener('click', () => {
     runQuery(sql, data => {
         const tbody = document.getElementById('dossiers-body');
         tbody.innerHTML = data.rows.map(r => `<tr>
-            <td>${r.numero??'—'}</td>
-            <td>${r.client_name??'—'}</td>
-            <td>${r.reference_client??'—'}</td>
-            <td>${r.ville??'—'}</td>
-            <td>${r.adresse??'—'}</td>
-            <td>${r.code_insee??'—'}</td>
+            <td>${_esc(r.numero??'—')}</td>
+            <td>${_esc(r.client_name??'—')}</td>
+            <td>${_esc(r.reference_client??'—')}</td>
+            <td>${_esc(r.ville??'—')}</td>
+            <td>${_esc(r.adresse??'—')}</td>
+            <td>${_esc(r.code_insee??'—')}</td>
             <td>${fmtEur(r.montant_tf)}</td>
             <td>${fmtDate(r.date_demande)}</td>
             <td>${fmtDate(r.date_remise)}</td>
@@ -329,15 +330,15 @@ document.getElementById('load-sites').addEventListener('click', () => {
     runQuery(sql, data => {
         const tbody = document.getElementById('sites-body');
         tbody.innerHTML = data.rows.map(r => `<tr>
-            <td>${r.nom??'—'}</td>
-            <td>${r.adresse??'—'}</td>
-            <td>${r.ville??'—'}</td>
-            <td>${r.code_postal??'—'}</td>
-            <td>${r.code_insee??'—'}</td>
-            <td>${r.section??'—'}</td>
-            <td>${r.parcelle??'—'}</td>
+            <td>${_esc(r.nom??'—')}</td>
+            <td>${_esc(r.adresse??'—')}</td>
+            <td>${_esc(r.ville??'—')}</td>
+            <td>${_esc(r.code_postal??'—')}</td>
+            <td>${_esc(r.code_insee??'—')}</td>
+            <td>${_esc(r.section??'—')}</td>
+            <td>${_esc(r.parcelle??'—')}</td>
             <td>${fmtEur(r.montant_tf)}</td>
-            <td><span class="badge ${r.geocode==='Oui'?'badge-ok':'badge-warn'}">${r.geocode}</span></td>
+            <td><span class="badge ${r.geocode==='Oui'?'badge-ok':'badge-warn'}">${_esc(r.geocode)}</span></td>
         </tr>`).join('');
         document.getElementById('sites-table-wrap').style.display = 'block';
         document.getElementById('sites-count').textContent = data.count + ' site(s)';

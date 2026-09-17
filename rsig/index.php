@@ -24,4 +24,20 @@ require 'app/routes/pages.php';
 require 'app/routes/api.php';
 
 Flight::set('flight.views.path', __DIR__ . '/views');
+
+// ── Filtre d'authentification global sur toutes les routes /api/* ─────────────
+Flight::before('start', function () {
+    $url    = Flight::request()->url;
+    $method = Flight::request()->method;
+    if (!str_starts_with($url, '/api/')) return;
+    // Mutations et routes sensibles → admin requis
+    if ($method === 'POST' || $method === 'PUT' || $method === 'DELETE'
+        || preg_match('#^/api/(sql|query|db-check|upload-csv)$#', $url)
+        || preg_match('#^/api/.*/import#', $url)) {
+        requireAdmin();
+    } else {
+        requireAuth();
+    }
+});
+
 Flight::start();

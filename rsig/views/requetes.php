@@ -256,7 +256,7 @@ function setupAutocomplete(inputEl, hiddenEl, listEl, onSelect) {
             .then(results => {
                 if (!results.length) { listEl.style.display = 'none'; return; }
                 listEl.innerHTML = results.map(r =>
-                    `<div class="item" data-code="${r.code_insee}" data-label="${r.label}">${r.label}</div>`
+                    `<div class="item" data-code="${_esc(r.code_insee)}" data-label="${_esc(r.label)}">${_esc(r.label)}</div>`
                 ).join('');
                 listEl.style.display = 'block';
                 listEl.querySelectorAll('.item').forEach(item => {
