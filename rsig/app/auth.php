@@ -99,7 +99,9 @@ function handleAuthCallback(): void {
     $token = json_decode($response, true);
     if (empty($token['id_token'])) {
         http_response_code(401);
-        echo 'Échec de l\'authentification Microsoft.';
+        $err  = htmlspecialchars($token['error']             ?? 'réponse vide');
+        $desc = htmlspecialchars($token['error_description'] ?? '');
+        echo "Échec auth Microsoft : $err — $desc";
         exit;
     }
 
