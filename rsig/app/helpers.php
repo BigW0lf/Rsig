@@ -2,8 +2,8 @@
 
 define('DB_FLAG_PATH', __DIR__ . '/../cache/db_offline.flag');
 
-// Hash git court pour cache-busting des assets statiques
-define('ASSET_VER', trim(@shell_exec('git -C ' . escapeshellarg(__DIR__ . '/../') . ' rev-parse --short HEAD 2>/dev/null') ?: (getenv('GIT_TAG') ?: 'dev')));
+// Hash git court pour cache-busting — env var GIT_TAG posée au build Docker, sinon git local
+define('ASSET_VER', getenv('GIT_TAG') ?: trim(@shell_exec('git -C ' . escapeshellarg(__DIR__ . '/../') . ' rev-parse --short HEAD 2>/dev/null') ?: 'dev'));
 
 function isDbOffline(): bool {
     return file_exists(DB_FLAG_PATH);
@@ -76,16 +76,16 @@ function cacheGet(string $key): mixed {
     $f = CACHE_DIR . md5($key) . '.json';
     if (!file_exists($f)) return null;
     $data = json_decode(file_get_contents($f), true);
-    if (!$data || $data['expires'] < time()) { @unlink($f); return null; }
+    if ($data === null || $data['expires'] < time()) { @unlink($f); return null; }
     return $data['payload'];
 }
 
 function cacheSet(string $key, mixed $payload, int $ttl = 300): void {
     if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0755, true);
-    file_put_contents(
-        CACHE_DIR . md5($key) . '.json',
-        json_encode(['expires' => time() + $ttl, 'payload' => $payload])
-    );
+    $f   = CACHE_DIR . md5($key) . '.json';
+    $tmp = $f . '.tmp';
+    file_put_contents($tmp, json_encode(['expires' => time() + $ttl, 'payload' => $payload]), LOCK_EX);
+    rename($tmp, $f);
 }
 
 const TAUX_CHAMPS = [

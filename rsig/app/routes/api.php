@@ -578,6 +578,9 @@ Flight::route('GET /api/taux', function () {
 Flight::route('GET /api/taux/stats', function () {
     $champ     = validateChamp(Flight::request()->query['champ'] ?? '', TAUX_CHAMPS, 'taux_fb_commune_vote');
     $millesime = validateMillesime(Flight::request()->query['millesime'] ?? '2025');
+    $cacheKey  = "taux_stats_{$champ}_{$millesime}";
+    $cached = cacheGet($cacheKey);
+    if ($cached !== null) { Flight::json($cached); return; }
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $sql = "SELECT
         percentile_cont(0.00) WITHIN GROUP (ORDER BY $champ::numeric) AS p0,
@@ -590,14 +593,16 @@ Flight::route('GET /api/taux/stats', function () {
     $stmt->execute([':millesime' => $millesime]);
     $row = $stmt->fetch();
     ini_set('serialize_precision', 4);
-    Flight::json(array_values(array_map(fn($v) => round((float)$v, 4), $row)));
+    $result = array_values(array_map(fn($v) => round((float)$v, 4), $row));
+    cacheSet($cacheKey, $result, 86400);
+    Flight::json($result);
 });
 
 Flight::route('GET /api/taux/departements', function () {
     $champ     = validateChamp(Flight::request()->query['champ'] ?? '', TAUX_CHAMPS, 'taux_fb_commune_vote');
     $millesime = validateMillesime(Flight::request()->query['millesime'] ?? '2025');
     $cacheKey  = "taux_dept_{$champ}_{$millesime}";
-    if ($cached = cacheGet($cacheKey)) { Flight::json($cached); return; }
+    $cached = cacheGet($cacheKey); if ($cached !== null) { Flight::json($cached); return; }
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
                    ROUND(AVG(tc.$champ::numeric)::numeric, 4) AS valeur_affichee,
@@ -872,7 +877,7 @@ Flight::route('GET /api/taux/evolution', function () {
 
     if ($level === 'dept') {
         $cacheKey = "taux_evol_dept_{$champ}_{$milDe}_{$milA}";
-        if ($cached = cacheGet($cacheKey)) { Flight::json($cached); return; }
+        $cached = cacheGet($cacheKey); if ($cached !== null) { Flight::json($cached); return; }
         $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
                        ROUND((AVG(t2.$champ::numeric) - AVG(t1.$champ::numeric))::numeric, 4) AS delta,
                        ROUND(AVG(t1.$champ::numeric)::numeric, 4) AS val_de,
@@ -994,7 +999,7 @@ Flight::route('GET /api/cfe/departements', function () {
     if (!$cat || !preg_match('/^[A-Z]{3}[0-9]$/', $cat)) { Flight::json(['error' => 'categorie requise'], 400); return; }
     $annee    = validateAnnee(Flight::request()->query['annee'] ?? '');
     $cacheKey = "cfe_dept_{$cat}_{$annee}";
-    if ($cached = cacheGet($cacheKey)) { Flight::json($cached); return; }
+    $cached = cacheGet($cacheKey); if ($cached !== null) { Flight::json($cached); return; }
     $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $col   = "val_$annee";
     $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
@@ -1057,7 +1062,7 @@ Flight::route('GET /api/tf/departements', function () {
     if (!$cat || !preg_match('/^[A-Z]{3}[0-9]$/', $cat)) { Flight::json(['error' => 'categorie requise'], 400); return; }
     $annee    = validateAnnee(Flight::request()->query['annee'] ?? '');
     $cacheKey = "tf_dept_{$cat}_{$annee}";
-    if ($cached = cacheGet($cacheKey)) { Flight::json($cached); return; }
+    $cached = cacheGet($cacheKey); if ($cached !== null) { Flight::json($cached); return; }
     $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $col   = "val_$annee";
     $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
@@ -1206,6 +1211,8 @@ Flight::route('GET /api/ta/exo', function () {
 });
 
 Flight::route('GET /api/ta/stats', function () {
+    $cached = cacheGet('ta_stats');
+    if ($cached !== null) { Flight::json($cached); return; }
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     // Quintiles précalculés sur l'ensemble des communes (toutes années confondues)
     $row = $db->query("
@@ -1225,10 +1232,12 @@ Flight::route('GET /api/ta/stats', function () {
             ROUND(PERCENTILE_CONT(1.0)  WITHIN GROUP (ORDER BY CASE WHEN dep IN ('75','77','78','91','92','93','94','95') THEN 900 ELSE 886 END * (COALESCE(taux_com,0)+COALESCE(taux_dep,0)+COALESCE(taux_reg,0))/100)::numeric,2) AS e100
         FROM ta_taux WHERE taux_com > 0
     ")->fetch();
-    Flight::json([
+    $result = [
         'taux_total' => [(float)$row['t0'],(float)$row['t20'],(float)$row['t40'],(float)$row['t60'],(float)$row['t80'],(float)$row['t100']],
         'estime'     => [(float)$row['e0'],(float)$row['e20'],(float)$row['e40'],(float)$row['e60'],(float)$row['e80'],(float)$row['e100']],
-    ]);
+    ];
+    cacheSet('ta_stats', $result, 86400);
+    Flight::json($result);
 });
 
 Flight::route('GET /api/ta/forfaitaires', function () {
@@ -1664,11 +1673,15 @@ Flight::route('GET /api/tass/tarifs', function () {
 });
 
 Flight::route('GET /api/tass', function () {
+    $cached = cacheGet('tass');
+    if ($cached !== null) { Flight::json($cached); return; }
     $db  = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $sql = "SELECT code_insee, libcom, dep, circonscription,
                    ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.0001), 5)::text AS geojson
             FROM tass_circonscriptions ORDER BY circonscription, code_insee";
-    Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($db->query($sql))]);
+    $result = ['type' => 'FeatureCollection', 'features' => rowsToGeoJson($db->query($sql))];
+    cacheSet('tass', $result, 86400);
+    Flight::json($result);
 });
 
 Flight::route('GET /api/tsb/millesimes', function () {
@@ -1916,12 +1929,16 @@ Flight::route('GET /api/tsb', function () {
 
 // ── ZFU — Zones Franches Urbaines (IDF + PACA) ───────────
 Flight::route('GET /api/zfu', function () {
+    $cached = cacheGet('zfu');
+    if ($cached !== null) { Flight::json($cached); return; }
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $sql = "SELECT codquart, nom_quartier, communes,
                    ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.0001), 5)::text AS geojson
             FROM zfu ORDER BY codquart";
     $stmt = $db->query($sql);
-    Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
+    $result = ['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)];
+    cacheSet('zfu', $result, 86400);
+    Flight::json($result);
 });
 
 // ── Sections cadastrales ──────────────────────────────────
@@ -1962,6 +1979,8 @@ Flight::route('GET /api/sections/communes', function () {
 
 // Niveau département (zoom < 9) — géométries des départements + secteur dominant
 Flight::route('GET /api/sections/departements', function () {
+    $cached = cacheGet('sections_dept');
+    if ($cached !== null) { Flight::json($cached); return; }
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $sql = "SELECT d.code_insee AS code_dep, d.nom_officiel AS nom_dep,
                    stats.nb_communes, stats.secteur_dom,
@@ -1974,7 +1993,9 @@ Flight::route('GET /api/sections/departements', function () {
                 FROM sections_2025 GROUP BY code_dep
             ) stats ON stats.code_dep = d.code_insee";
     $stmt = $db->query($sql);
-    Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
+    $result = ['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)];
+    cacheSet('sections_dept', $result, 86400);
+    Flight::json($result);
 });
 
 // ── Coefficients de localisation ──────────────────────────
@@ -1997,23 +2018,33 @@ Flight::route('GET /api/coeff', function () {
 });
 
 Flight::route('GET /api/coeff/stats', function () {
-    $champ = validateChamp(Flight::request()->query['champ'] ?? '', COEFF_CHAMPS, 'coeff_2026');
+    $champ    = validateChamp(Flight::request()->query['champ'] ?? '', COEFF_CHAMPS, 'coeff_2026');
+    $cacheKey = "coeff_stats_{$champ}";
+    $cached   = cacheGet($cacheKey);
+    if ($cached !== null) { Flight::json($cached); return; }
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $sql = "SELECT MIN($champ::numeric) AS vmin, MAX($champ::numeric) AS vmax
             FROM coeff_loc_final WHERE $champ IS NOT NULL";
     $row = $db->query($sql)->fetch(PDO::FETCH_ASSOC);
     ini_set('serialize_precision', 6);
-    Flight::json([(float)$row['vmin'], (float)$row['vmax']]);
+    $result = [(float)$row['vmin'], (float)$row['vmax']];
+    cacheSet($cacheKey, $result, 3600);
+    Flight::json($result);
 });
 
 Flight::route('GET /api/coeff/clusters', function () {
-    $champ = validateChamp(Flight::request()->query['champ'] ?? '', COEFF_CHAMPS, 'coeff_2026');
+    $champ    = validateChamp(Flight::request()->query['champ'] ?? '', COEFF_CHAMPS, 'coeff_2026');
+    $cacheKey = "coeff_clusters_{$champ}";
+    $cached   = cacheGet($cacheKey);
+    if ($cached !== null) { Flight::json($cached); return; }
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $sql = "SELECT codecommune, $champ AS valeur, nb_parcelles,
                    ST_AsGeoJSON(ST_Centroid(geom::geometry), 6)::text AS geojson
             FROM coeff_clusters WHERE $champ IS NOT NULL ORDER BY codecommune";
     $stmt = $db->query($sql);
-    Flight::json(['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)]);
+    $result = ['type' => 'FeatureCollection', 'features' => rowsToGeoJson($stmt)];
+    cacheSet($cacheKey, $result, 3600);
+    Flight::json($result);
 });
 
 // ── Dossiers ──────────────────────────────────────────────
@@ -2042,8 +2073,11 @@ Flight::route('GET /api/tarifs/categories', function () {
 Flight::route('GET /api/tarifs/stats', function () {
     $cat = Flight::request()->query['categorie'] ?? '';
     if (!preg_match('/^[A-Z]{3}[0-9]$/', $cat)) { Flight::json(['error' => 'categorie invalide'], 400); return; }
-    $annee = validateAnnee(Flight::request()->query['annee'] ?? '');
-    $col   = "val_$annee";
+    $annee    = validateAnnee(Flight::request()->query['annee'] ?? '');
+    $cacheKey = "tarifs_stats_{$cat}_{$annee}";
+    $cached   = cacheGet($cacheKey);
+    if ($cached !== null) { Flight::json($cached); return; }
+    $col = "val_$annee";
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $sql = "SELECT
         percentile_cont(0.000) WITHIN GROUP (ORDER BY $col) AS p0,
@@ -2057,7 +2091,9 @@ Flight::route('GET /api/tarifs/stats', function () {
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':cat', $cat);
     $stmt->execute();
-    Flight::json(array_values(array_map('floatval', $stmt->fetch())));
+    $result = array_values(array_map('floatval', $stmt->fetch()));
+    cacheSet($cacheKey, $result, 86400);
+    Flight::json($result);
 });
 
 Flight::route('GET /api/tarifs', function () {

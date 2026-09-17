@@ -67,8 +67,6 @@ function upsert(map, fc, propKey) {
         map.addLayer({ id: 'sections-fill', type: 'fill', source: 'sections-src',
             layout: { visibility: vis },
             paint: { 'fill-color': color, 'fill-opacity': 0.5, 'fill-outline-color': '#000000' } });
-        map.on('mouseenter', 'sections-fill', () => map.getCanvas().style.cursor = 'pointer');
-        map.on('mouseleave', 'sections-fill', () => map.getCanvas().style.cursor = '');
     }
 }
 
@@ -113,6 +111,9 @@ export function loadSections(map) {
 export function initSections(map) {
     const toggle  = document.getElementById('toggle-sections');
     const options = document.getElementById('sections-options');
+
+    map.on('mouseenter', 'sections-fill', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'sections-fill', () => map.getCanvas().style.cursor = '');
 
     toggle.addEventListener('change', () => {
         active = toggle.checked;

@@ -27,15 +27,15 @@ export function loadZfu(map) {
             loaded = true;
             bddOnTop(map);
             saveLegend('zfu', 'ZFU — Exo. TSB', ['ZFU — Zone Franche Urbaine'], [COLOR_FILL], '');
-
-            map.on('mouseenter', 'zfu-fill', () => map.getCanvas().style.cursor = 'pointer');
-            map.on('mouseleave', 'zfu-fill', () => map.getCanvas().style.cursor = '');
         })
         .catch(e => { hideSpinner(); });
 }
 
 export function initZfu(map) {
     const toggle = document.getElementById('toggle-zfu');
+
+    map.on('mouseenter', 'zfu-fill', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'zfu-fill', () => map.getCanvas().style.cursor = '');
 
     map.on('click', 'zfu-fill', e => {
         if (!active || isMeasuring()) return;

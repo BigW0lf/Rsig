@@ -59,8 +59,6 @@ function upsert(map, fc, color) {
         map.addLayer({ id: 'taux-line', type: 'line', source: 'taux-src',
             layout: { visibility: vis },
             paint: { 'line-color': '#334', 'line-width': 0.5 } });
-        map.on('mouseenter', 'taux-fill', () => map.getCanvas().style.cursor = 'pointer');
-        map.on('mouseleave', 'taux-fill', () => map.getCanvas().style.cursor = '');
     }
     bddOnTop(map);
 }
@@ -140,6 +138,9 @@ export function initTaux(map) {
     const evolOpts    = document.getElementById('taux-evol-opts');
     const evolDeEl    = document.getElementById('taux-evol-de');
     const evolAEl     = document.getElementById('taux-evol-a');
+
+    map.on('mouseenter', 'taux-fill', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'taux-fill', () => map.getCanvas().style.cursor = '');
 
     fetch('/api/taux/millesimes')
         .then(r => r.json())

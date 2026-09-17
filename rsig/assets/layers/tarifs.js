@@ -49,8 +49,6 @@ function upsert(map, fc, color) {
         map.addLayer({ id: 'tarifs-line', type: 'line', source: 'tarifs-src',
             layout: { visibility: vis },
             paint: { 'line-color': '#444', 'line-width': 0.5 } });
-        map.on('mouseenter', 'tarifs-fill', () => map.getCanvas().style.cursor = 'pointer');
-        map.on('mouseleave', 'tarifs-fill', () => map.getCanvas().style.cursor = '');
     }
     bddOnTop(map);
 }
@@ -103,6 +101,9 @@ export function initTarifs(map, catsReady) {
     const options = document.getElementById('tarifs-options');
     const catEl   = document.getElementById('tarifs-cat');
     const anneeEl = document.getElementById('tarifs-annee');
+
+    map.on('mouseenter', 'tarifs-fill', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'tarifs-fill', () => map.getCanvas().style.cursor = '');
 
     catsReady.then(cats => {
         if (!cats?.length) return;

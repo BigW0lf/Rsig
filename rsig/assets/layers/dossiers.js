@@ -47,25 +47,26 @@ export function loadDossiers(map) {
             loaded = true;
             bddOnTop(map);
             if (breaks) saveLegend('dossiers', 'Taxe foncière (€)', breaks, PAL.tf, ' €');
-
-            map.on('mouseenter', 'dossiers-circle',  () => map.getCanvas().style.cursor = 'pointer');
-            map.on('mouseleave', 'dossiers-circle',  () => map.getCanvas().style.cursor = '');
-            map.on('mouseenter', 'dossiers-cluster', () => map.getCanvas().style.cursor = 'pointer');
-            map.on('mouseleave', 'dossiers-cluster', () => map.getCanvas().style.cursor = '');
-
-            map.on('click', 'dossiers-cluster', e => {
-                if (isMeasuring()) return;
-                const feat = map.queryRenderedFeatures(e.point, { layers: ['dossiers-cluster'] });
-                map.getSource('dossiers-src').getClusterExpansionZoom(feat[0].properties.cluster_id, (err, zoom) => {
-                    if (!err) map.easeTo({ center: feat[0].geometry.coordinates, zoom });
-                });
-            });
         })
         .catch(e => { hideSpinner(); });
 }
 
 export function initDossiers(map) {
     const toggle = document.getElementById('toggle-dossiers');
+
+    map.on('mouseenter', 'dossiers-circle',  () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'dossiers-circle',  () => map.getCanvas().style.cursor = '');
+    map.on('mouseenter', 'dossiers-cluster', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'dossiers-cluster', () => map.getCanvas().style.cursor = '');
+
+    map.on('click', 'dossiers-cluster', e => {
+        if (isMeasuring()) return;
+        const feat = map.queryRenderedFeatures(e.point, { layers: ['dossiers-cluster'] });
+        if (!feat.length) return;
+        map.getSource('dossiers-src').getClusterExpansionZoom(feat[0].properties.cluster_id, (err, zoom) => {
+            if (!err) map.easeTo({ center: feat[0].geometry.coordinates, zoom });
+        });
+    });
 
     map.on('click', 'dossiers-circle', e => {
         if (!active || isMeasuring()) return;

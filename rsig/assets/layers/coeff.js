@@ -93,29 +93,23 @@ function ensureHatchForColor(map, colorHex, key) {
     _hatchCache[key] = true;
 }
 
-// Met à jour (ou crée) les sources hachurées par classe de couleur — setData si déjà existantes
-function buildHatchSources(map, fc, breaks, palette, propKey, beforeLayer, vis = 'visible') {
+// Crée ou met à jour les couches hachurées (filter expressions sur coeff-src)
+function buildHatchLayers(map, breaks, palette, propKey, beforeLayer, vis = 'visible') {
     if (!breaks?.length) return;
     palette.forEach((col, i) => {
         const imgKey = `coeff-hatch-img-${col.replace('#','')}`;
         ensureHatchForColor(map, col, imgKey);
-        const lo    = breaks[i] ?? -Infinity;
-        const hi    = breaks[i + 1] ?? Infinity;
-        const feats = fc.features.filter(f => {
-            const v = f.properties[propKey];
-            return v != null && +v >= lo && (i === palette.length - 1 ? true : +v < hi);
-        });
-        const data  = { type: 'FeatureCollection', features: feats };
-        const srcId = `coeff-hatch-src-${i}`;
-        if (map.getSource(srcId)) {
-            map.getSource(srcId).setData(data);
-            if (map.getLayer(`coeff-hatch-${i}`)) {
-                map.setLayoutProperty(`coeff-hatch-${i}`, 'visibility', vis === 'none' ? 'none' : (feats.length ? 'visible' : 'none'));
-            }
+        const lo = breaks[i] ?? -Infinity;
+        const hi = breaks[i + 1] ?? Infinity;
+        const filter = i === palette.length - 1
+            ? ['>=', ['to-number', ['get', propKey], 0], lo]
+            : ['all', ['>=', ['to-number', ['get', propKey], 0], lo], ['<', ['to-number', ['get', propKey], 0], hi]];
+        if (map.getLayer(`coeff-hatch-${i}`)) {
+            map.setFilter(`coeff-hatch-${i}`, filter);
+            map.setLayoutProperty(`coeff-hatch-${i}`, 'visibility', vis);
         } else {
-            if (!feats.length) return;
-            map.addSource(srcId, { type: 'geojson', data });
-            map.addLayer({ id: `coeff-hatch-${i}`, type: 'fill', source: srcId,
+            map.addLayer({ id: `coeff-hatch-${i}`, type: 'fill', source: 'coeff-src',
+                filter,
                 layout: { visibility: vis },
                 paint: { 'fill-pattern': imgKey } }, beforeLayer);
         }
@@ -130,7 +124,7 @@ function upsertPoly(map, fc, color, breaks, palette, propKey) {
         map.getSource('coeff-src').setData(fc);
         map.setLayoutProperty('coeff-fill', 'visibility', vis);
         map.setLayoutProperty('coeff-line', 'visibility', vis);
-        buildHatchSources(map, fc, breaks, palette, propKey, beforeLayer, vis);
+        buildHatchLayers(map, breaks, palette, propKey, beforeLayer, vis);
     } else {
         if (map.getSource('coeff-src')) {
             ['coeff-line','coeff-fill'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
@@ -143,9 +137,7 @@ function upsertPoly(map, fc, color, breaks, palette, propKey) {
         map.addLayer({ id: 'coeff-line', type: 'line', source: 'coeff-src',
             layout: { visibility: vis },
             paint: { 'line-color': color, 'line-width': 0.8 } }, beforeLayer);
-        map.on('mouseenter', 'coeff-fill', () => map.getCanvas().style.cursor = 'pointer');
-        map.on('mouseleave', 'coeff-fill', () => map.getCanvas().style.cursor = '');
-        buildHatchSources(map, fc, breaks, palette, propKey, beforeLayer, vis);
+        buildHatchLayers(map, breaks, palette, propKey, beforeLayer, vis);
     }
     bddOnTop(map);
 }
@@ -203,25 +195,6 @@ function showClusters(map, champ, globalB) {
                 layout: { 'text-field': '{point_count_abbreviated}', 'text-font': ['Noto Sans Regular'], 'text-size': 11 },
                 paint: { 'text-color': '#fff' } });
 
-            map.on('mouseenter', 'coeff-cluster-circle',  () => map.getCanvas().style.cursor = 'pointer');
-            map.on('mouseleave', 'coeff-cluster-circle',  () => map.getCanvas().style.cursor = '');
-            map.on('mouseenter', 'coeff-cluster-cluster', () => map.getCanvas().style.cursor = 'pointer');
-            map.on('mouseleave', 'coeff-cluster-cluster', () => map.getCanvas().style.cursor = '');
-            map.on('click', 'coeff-cluster-cluster', e => {
-                const feat = map.queryRenderedFeatures(e.point, { layers: ['coeff-cluster-cluster'] });
-                map.getSource(src).getClusterExpansionZoom(feat[0].properties.cluster_id, (err, zoom) => {
-                    if (!err) map.easeTo({ center: feat[0].geometry.coordinates, zoom });
-                });
-            });
-            map.on('click', 'coeff-cluster-circle', e => {
-                if (!active) return;
-                const p = e.features[0].properties;
-                showInfo('coeff', `Commune ${p.codecommune}`,
-                    irow('Coeff moyen', p.valeur) +
-                    irow('Nb parcelles', p.nb_parcelles) +
-                    `<div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 13 pour voir le détail par parcelle</div>`
-                );
-            });
         }
 
         bddOnTop(map);
@@ -290,6 +263,29 @@ export function initCoeff(map) {
     const toggle  = document.getElementById('toggle-coeff');
     const options = document.getElementById('coeff-options');
     const champEl = document.getElementById('coeff-champ');
+
+    map.on('mouseenter', 'coeff-fill',            () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'coeff-fill',            () => map.getCanvas().style.cursor = '');
+    map.on('mouseenter', 'coeff-cluster-circle',  () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'coeff-cluster-circle',  () => map.getCanvas().style.cursor = '');
+    map.on('mouseenter', 'coeff-cluster-cluster', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'coeff-cluster-cluster', () => map.getCanvas().style.cursor = '');
+    map.on('click', 'coeff-cluster-cluster', e => {
+        const feat = map.queryRenderedFeatures(e.point, { layers: ['coeff-cluster-cluster'] });
+        if (!feat.length) return;
+        map.getSource('coeff-cluster-src').getClusterExpansionZoom(feat[0].properties.cluster_id, (err, zoom) => {
+            if (!err) map.easeTo({ center: feat[0].geometry.coordinates, zoom });
+        });
+    });
+    map.on('click', 'coeff-cluster-circle', e => {
+        if (!active) return;
+        const p = e.features[0].properties;
+        showInfo('coeff', `Commune ${p.codecommune}`,
+            irow('Coeff moyen', p.valeur) +
+            irow('Nb parcelles', p.nb_parcelles) +
+            `<div class="info-row" style="font-size:11px;color:var(--text3)">Zoomez ≥ 13 pour voir le détail par parcelle</div>`
+        );
+    });
 
     toggle.addEventListener('change', () => {
         active = toggle.checked;

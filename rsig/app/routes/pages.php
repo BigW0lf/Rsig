@@ -9,16 +9,18 @@ function trackVisit(string $page, ?string $layers = null): void {
     $db = getDb();
     if (!$db) return;
     try {
-        // Créer la table si elle n'existe pas (first-run)
-        $db->exec("CREATE TABLE IF NOT EXISTS site_visits (
-            id           SERIAL PRIMARY KEY,
-            visited_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-            page         TEXT NOT NULL,
-            user_name    TEXT,
-            user_email   TEXT,
-            ip           TEXT,
-            layers_used  TEXT
-        )");
+        // DDL seulement si la table n'existe pas encore (évite un DDL à chaque hit)
+        if (!$db->query("SELECT to_regclass('public.site_visits')")->fetchColumn()) {
+            $db->exec("CREATE TABLE IF NOT EXISTS site_visits (
+                id           SERIAL PRIMARY KEY,
+                visited_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                page         TEXT NOT NULL,
+                user_name    TEXT,
+                user_email   TEXT,
+                ip           TEXT,
+                layers_used  TEXT
+            )");
+        }
         $stmt = $db->prepare(
             "INSERT INTO site_visits (page, user_name, user_email, ip, layers_used)
              VALUES (:page, :name, :email, :ip, :layers)"

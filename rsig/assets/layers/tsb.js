@@ -120,9 +120,6 @@ function loadRegion(map, region) {
             });
             saveLegend(`tsb-${region.toLowerCase()}`, `TSB ${region}`, entries.map(e => e.label), entries.map(e => e.color), '');
 
-            // Curseur
-            map.on('mouseenter', `tsb-${region.toLowerCase()}-fill`, () => map.getCanvas().style.cursor = 'pointer');
-            map.on('mouseleave', `tsb-${region.toLowerCase()}-fill`, () => map.getCanvas().style.cursor = '');
         })
         .catch(e => { hideSpinner(); });
 }
@@ -157,6 +154,11 @@ export function initTsb(map) {
             rows.map(t => irow(t.type_local, fmt(t.tarif))).join('') +
             '</div>';
     }
+
+    map.on('mouseenter', 'tsb-idf-fill',  () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'tsb-idf-fill',  () => map.getCanvas().style.cursor = '');
+    map.on('mouseenter', 'tsb-paca-fill', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'tsb-paca-fill', () => map.getCanvas().style.cursor = '');
 
     // Clic IDF
     map.on('click', 'tsb-idf-fill', e => {

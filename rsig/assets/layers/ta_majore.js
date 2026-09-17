@@ -127,14 +127,6 @@ function buildLayers(map, fc) {
             },
         });
 
-        map.on('click', 'ta-maj-cluster', e => {
-            const f = map.queryRenderedFeatures(e.point, { layers: ['ta-maj-cluster'] })[0];
-            map.getSource('ta-maj-pts').getClusterExpansionZoom(f.properties.cluster_id, (err, zoom) => {
-                if (!err) map.easeTo({ center: f.geometry.coordinates, zoom });
-            });
-        });
-        map.on('mouseenter', 'ta-maj-cluster', () => map.getCanvas().style.cursor = 'pointer');
-        map.on('mouseleave', 'ta-maj-cluster', () => map.getCanvas().style.cursor = '');
     }
 
     bddOnTop(map);
@@ -241,8 +233,17 @@ export function initTaMajore(map) {
         map.on('mouseleave', id, () => map.getCanvas().style.cursor = '');
     });
     map.on('click', 'ta-maj-point', e => { if (!active || !e.features?.[0]) return; showMajoreInfo(e.features[0].properties); });
-    map.on('mouseenter', 'ta-maj-point', () => map.getCanvas().style.cursor = 'pointer');
-    map.on('mouseleave', 'ta-maj-point', () => map.getCanvas().style.cursor = '');
+    map.on('mouseenter', 'ta-maj-point',   () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'ta-maj-point',   () => map.getCanvas().style.cursor = '');
+    map.on('click', 'ta-maj-cluster', e => {
+        const f = map.queryRenderedFeatures(e.point, { layers: ['ta-maj-cluster'] })[0];
+        if (!f) return;
+        map.getSource('ta-maj-pts').getClusterExpansionZoom(f.properties.cluster_id, (err, zoom) => {
+            if (!err) map.easeTo({ center: f.geometry.coordinates, zoom });
+        });
+    });
+    map.on('mouseenter', 'ta-maj-cluster', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'ta-maj-cluster', () => map.getCanvas().style.cursor = '');
 
     toggle?.addEventListener('change', () => {
         active = toggle.checked;

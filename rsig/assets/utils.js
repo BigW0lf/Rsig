@@ -192,7 +192,7 @@ export function bddOnTop(map) {
         const existing = _BDD_ORDER.filter(id => m.getLayer(id));
         if (!existing.length) return;
         // Ne faire des moveLayer que si l'ordre diffère de ce qu'on veut
-        const allLayers = m.getStyle()?.layers?.map(l => l.id) ?? [];
+        const allLayers = m.getLayersOrder?.() ?? m.getStyle()?.layers?.map(l => l.id) ?? [];
         let lastIdx = -1;
         let needsReorder = false;
         for (const id of existing) {
