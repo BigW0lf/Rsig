@@ -32,14 +32,18 @@ const OPERATORS = {
         { value: 'not_startswith', label: 'ne commence pas par' },
         { value: 'exact',          label: 'est exactement' },
         { value: 'not_exact',      label: 'est différent de' },
+        { value: 'in',             label: "est l'une de" },
+        { value: 'not_in',         label: "n'est pas l'une de" },
     ],
     number: [
-        { value: 'eq',  label: '=' },
-        { value: 'neq', label: '≠' },
-        { value: 'gt',  label: '>' },
-        { value: 'lt',  label: '<' },
-        { value: 'gte', label: '>=' },
-        { value: 'lte', label: '<=' },
+        { value: 'eq',     label: '=' },
+        { value: 'neq',    label: '≠' },
+        { value: 'gt',     label: '>' },
+        { value: 'lt',     label: '<' },
+        { value: 'gte',    label: '>=' },
+        { value: 'lte',    label: '<=' },
+        { value: 'in',     label: "est l'un de" },
+        { value: 'not_in', label: "n'est pas l'un de" },
     ],
     date: [
         { value: 'on',      label: 'le' },
@@ -50,8 +54,12 @@ const OPERATORS = {
     select: [
         { value: 'exact',     label: 'est' },
         { value: 'not_exact', label: 'est différent de' },
+        { value: 'in',        label: "est l'un de" },
+        { value: 'not_in',    label: "n'est pas l'un de" },
     ],
 };
+
+const MULTI_OPS = new Set(['in', 'not_in']);
 
 // ── État ───────────────────────────────────────────────────────────────────
 let _rules = [];          // { id, field, operator, value, value2? }
@@ -79,12 +87,16 @@ function matchRule(props, rule) {
         if (op === 'not_startswith') return !val.startsWith(term);
         if (op === 'exact')          return val === term;
         if (op === 'not_exact')      return val !== term;
+        if (op === 'in')     return Array.isArray(rule.value) && rule.value.some(v => val === v.toLowerCase());
+        if (op === 'not_in') return !Array.isArray(rule.value) || rule.value.every(v => val !== v.toLowerCase());
         return true;
     }
 
     if (fieldDef.type === 'number') {
         const num = parseFloat(raw);
         const ref = parseFloat(rule.value);
+        if (op === 'in')     return Array.isArray(rule.value) && rule.value.some(v => isFinite(num) && num === parseFloat(v));
+        if (op === 'not_in') return !Array.isArray(rule.value) || rule.value.every(v => !isFinite(num) || num !== parseFloat(v));
         if (!isFinite(num) || !isFinite(ref)) return true;
         if (op === 'eq')  return num === ref;
         if (op === 'neq') return num !== ref;
@@ -116,6 +128,8 @@ function matchRule(props, rule) {
     if (fieldDef.type === 'select') {
         if (op === 'exact')     return (raw ?? '') === rule.value;
         if (op === 'not_exact') return (raw ?? '') !== rule.value;
+        if (op === 'in')        return Array.isArray(rule.value) && rule.value.includes(raw ?? '');
+        if (op === 'not_in')    return !Array.isArray(rule.value) || !rule.value.includes(raw ?? '');
         return true;
     }
 
@@ -152,6 +166,12 @@ function ruleLabel(rule) {
         ? (OPERATORS[fieldDef.type] || []).find(o => o.value === rule.operator)
         : null;
     const opLabel = opDef ? opDef.label : rule.operator;
+    if (Array.isArray(rule.value)) {
+        const shown = rule.value.length > 2
+            ? rule.value.slice(0, 2).join(', ') + ` +${rule.value.length - 2}`
+            : rule.value.join(', ');
+        return `${fieldLabel} ${opLabel} [${shown}]`;
+    }
     const val2 = rule.value2 ? ` → ${rule.value2}` : '';
     return `${fieldLabel} ${opLabel} ${rule.value}${val2}`;
 }
@@ -206,18 +226,17 @@ function buildForm() {
     const opSel = document.createElement('select');
     opSel.className = 'df-select';
 
-    // Value input (texte/nombre/date)
+    // ── Inputs mono-valeur ──
     const val1 = document.createElement('input');
     val1.className = 'df-input';
     val1.placeholder = 'Valeur…';
     val1.autocomplete = 'off';
 
-    // Autocomplete sur les champs texte
     let _acInstance = null;
     function _rebindAc() {
         if (_acInstance) { _acInstance.hide(); _acInstance = null; }
         const fk = fieldSel.value;
-        if (AC_TEXT_FIELDS.has(fk)) {
+        if (AC_TEXT_FIELDS.has(fk) && !MULTI_OPS.has(opSel.value)) {
             _acInstance = makeAutocomplete(val1, (term) => {
                 const low = term.toLowerCase();
                 return (_textOptions[fk] || []).filter(v => v.toLowerCase().includes(low)).slice(0, 8);
@@ -225,7 +244,6 @@ function buildForm() {
         }
     }
 
-    // Value select (pour les champs type 'select')
     const val1Sel = document.createElement('select');
     val1Sel.className = 'df-select';
 
@@ -238,43 +256,148 @@ function buildForm() {
     val2Wrap.appendChild(val2);
     val2Wrap.style.display = 'none';
 
+    // ── Section multi-valeurs ──
+    const multiWrap = document.createElement('div');
+    multiWrap.className = 'df-multi-wrap';
+    multiWrap.style.display = 'none';
+
+    // checklist (type select)
+    const checklistWrap = document.createElement('div');
+    checklistWrap.className = 'df-checklist';
+
+    // chip input (type text / number)
+    const chipInputWrap = document.createElement('div');
+    chipInputWrap.className = 'df-chip-input-wrap';
+    const chipList = document.createElement('div');
+    chipList.className = 'df-chip-list';
+    const chipRow = document.createElement('div');
+    chipRow.className = 'df-chip-row';
+    const chipInp = document.createElement('input');
+    chipInp.className = 'df-input';
+    chipInp.placeholder = 'Valeur… (Entrée pour ajouter)';
+    const chipAddBtn = document.createElement('button');
+    chipAddBtn.type = 'button';
+    chipAddBtn.className = 'df-btn-chip-add';
+    chipAddBtn.textContent = '+';
+    chipRow.appendChild(chipInp);
+    chipRow.appendChild(chipAddBtn);
+    chipInputWrap.appendChild(chipList);
+    chipInputWrap.appendChild(chipRow);
+
+    multiWrap.appendChild(checklistWrap);
+    multiWrap.appendChild(chipInputWrap);
+
+    let _multiValues = [];
+
+    function renderChipList() {
+        chipList.innerHTML = '';
+        _multiValues.forEach((v, i) => {
+            const chip = document.createElement('span');
+            chip.className = 'df-chip';
+            const txt = document.createElement('span');
+            txt.textContent = v;
+            const rm = document.createElement('button');
+            rm.type = 'button';
+            rm.textContent = '×';
+            rm.addEventListener('click', () => { _multiValues.splice(i, 1); renderChipList(); });
+            chip.appendChild(txt);
+            chip.appendChild(rm);
+            chipList.appendChild(chip);
+        });
+    }
+
+    function addChipValue(v) {
+        v = v.trim();
+        if (!v || _multiValues.includes(v)) return;
+        _multiValues.push(v);
+        renderChipList();
+        chipInp.value = '';
+    }
+
+    chipAddBtn.addEventListener('click', () => addChipValue(chipInp.value));
+    chipInp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addChipValue(chipInp.value); } });
+
+    function renderChecklist() {
+        checklistWrap.innerHTML = '';
+        const fieldDef = FIELDS.find(f => f.key === fieldSel.value);
+        if (!fieldDef) return;
+        const opts = _selectOptions[fieldDef.key] || [];
+        opts.forEach(v => {
+            const lbl = document.createElement('label');
+            lbl.className = 'df-check-label';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.value = v;
+            cb.addEventListener('change', () => {
+                if (cb.checked) { if (!_multiValues.includes(v)) _multiValues.push(v); }
+                else { _multiValues = _multiValues.filter(x => x !== v); }
+            });
+            lbl.appendChild(cb);
+            lbl.appendChild(document.createTextNode(' ' + (v || '(vide)')));
+            checklistWrap.appendChild(lbl);
+        });
+    }
+
+    function updateInputVis() {
+        const fieldDef = FIELDS.find(f => f.key === fieldSel.value);
+        const type  = fieldDef ? fieldDef.type : 'text';
+        const op    = opSel.value;
+        const multi = MULTI_OPS.has(op);
+
+        _multiValues = [];
+
+        if (multi) {
+            val1.style.display      = 'none';
+            val1Sel.style.display   = 'none';
+            val2Wrap.style.display  = 'none';
+            multiWrap.style.display = '';
+            if (type === 'select') {
+                checklistWrap.style.display = '';
+                chipInputWrap.style.display = 'none';
+                renderChecklist();
+            } else {
+                checklistWrap.style.display = 'none';
+                chipInputWrap.style.display = '';
+                chipList.innerHTML = '';
+                chipInp.type = type === 'number' ? 'number' : 'text';
+            }
+        } else {
+            multiWrap.style.display = 'none';
+            if (type === 'select') {
+                val1Sel.innerHTML = '';
+                (_selectOptions[fieldDef?.key] || []).forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v; opt.textContent = v || '(vide)';
+                    val1Sel.appendChild(opt);
+                });
+                val1.style.display    = 'none';
+                val1Sel.style.display = '';
+            } else {
+                val1.style.display    = '';
+                val1Sel.style.display = 'none';
+                val1.type = type === 'date' ? 'date' : (type === 'number' ? 'number' : 'text');
+                val2.type = val1.type;
+            }
+            val2Wrap.style.display = op === 'between' ? 'inline-flex' : 'none';
+        }
+        _rebindAc();
+    }
+
     function updateOpSel() {
         const fieldDef = FIELDS.find(f => f.key === fieldSel.value);
         const type = fieldDef ? fieldDef.type : 'text';
         opSel.innerHTML = '';
         (OPERATORS[type] || []).forEach(o => {
             const opt = document.createElement('option');
-            opt.value = o.value;
-            opt.textContent = o.label;
+            opt.value = o.value; opt.textContent = o.label;
             opSel.appendChild(opt);
         });
-        if (type === 'select') {
-            val1Sel.innerHTML = '';
-            (_selectOptions[fieldDef.key] || []).forEach(v => {
-                const opt = document.createElement('option');
-                opt.value = v;
-                opt.textContent = v || '(vide)';
-                val1Sel.appendChild(opt);
-            });
-            val1.style.display    = 'none';
-            val1Sel.style.display = '';
-        } else {
-            val1.style.display    = '';
-            val1Sel.style.display = 'none';
-            val1.type = type === 'date' ? 'date' : (type === 'number' ? 'number' : 'text');
-            val2.type = val1.type;
-        }
-        _rebindAc();
-        updateVal2();
-    }
-
-    function updateVal2() {
-        val2Wrap.style.display = opSel.value === 'between' ? 'inline-flex' : 'none';
+        updateInputVis();
     }
 
     val1Sel.style.display = 'none';
     fieldSel.addEventListener('change', updateOpSel);
-    opSel.addEventListener('change', updateVal2);
+    opSel.addEventListener('change', updateInputVis);
     updateOpSel();
 
     // Buttons row
@@ -282,38 +405,44 @@ function buildForm() {
     btnRow.className = 'df-btn-row';
 
     const addBtn = document.createElement('button');
+    addBtn.type = 'button';
     addBtn.className = 'df-btn df-btn-ok';
     addBtn.textContent = 'Ajouter';
     addBtn.addEventListener('click', () => {
         const fieldDef = FIELDS.find(f => f.key === fieldSel.value);
-        const isSelect = fieldDef?.type === 'select';
-        const v = isSelect ? val1Sel.value : val1.value.trim();
-        if (!v) { (isSelect ? val1Sel : val1).focus(); return; }
-        const rule = {
-            id: ++_ruleIdSeq,
-            field: fieldSel.value,
-            operator: opSel.value,
-            value: v,
-        };
-        if (opSel.value === 'between') {
-            const v2 = val2.value.trim();
-            if (!v2) { val2.focus(); return; }
-            rule.value2 = v2;
+        const op    = opSel.value;
+        const multi = MULTI_OPS.has(op);
+
+        if (multi) {
+            if (!_multiValues.length) return;
+            _rules.push({ id: ++_ruleIdSeq, field: fieldSel.value, operator: op, value: [..._multiValues] });
+            _multiValues = [];
+            chipList.innerHTML = '';
+            checklistWrap.querySelectorAll('input[type=checkbox]').forEach(cb => { cb.checked = false; });
+        } else {
+            const isSelect = fieldDef?.type === 'select';
+            const v = isSelect ? val1Sel.value : val1.value.trim();
+            if (!v) { (isSelect ? val1Sel : val1).focus(); return; }
+            const rule = { id: ++_ruleIdSeq, field: fieldSel.value, operator: op, value: v };
+            if (op === 'between') {
+                const v2 = val2.value.trim();
+                if (!v2) { val2.focus(); return; }
+                rule.value2 = v2;
+            }
+            _rules.push(rule);
+            val1.value = '';
+            val2.value = '';
         }
-        _rules.push(rule);
         renderRules();
         pushToMap();
-        val1.value = '';
-        val2.value = '';
         _formWrap.style.display = 'none';
     });
 
     const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
     cancelBtn.className = 'df-btn df-btn-cancel';
     cancelBtn.textContent = 'Annuler';
-    cancelBtn.addEventListener('click', () => {
-        _formWrap.style.display = 'none';
-    });
+    cancelBtn.addEventListener('click', () => { _formWrap.style.display = 'none'; });
 
     btnRow.appendChild(addBtn);
     btnRow.appendChild(cancelBtn);
@@ -323,6 +452,7 @@ function buildForm() {
     form.appendChild(val1);
     form.appendChild(val1Sel);
     form.appendChild(val2Wrap);
+    form.appendChild(multiWrap);
     form.appendChild(btnRow);
 
     return form;
@@ -447,6 +577,32 @@ function injectStyles() {
 .df-btn-ok:hover { background: var(--blue-light); }
 .df-btn-cancel { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
 .df-btn-cancel:hover { background: var(--border); }
+.df-multi-wrap { display: flex; flex-direction: column; gap: 4px; }
+.df-checklist { display: flex; flex-direction: column; gap: 3px; max-height: 120px; overflow-y: auto; padding: 4px 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; }
+.df-check-label { display: flex; align-items: center; font-size: 11px; cursor: pointer; padding: 1px 0; }
+.df-check-label input[type=checkbox] { margin-right: 4px; accent-color: var(--blue); }
+.df-chip-input-wrap { display: flex; flex-direction: column; gap: 4px; }
+.df-chip-list { display: flex; flex-wrap: wrap; gap: 3px; min-height: 0; }
+.df-chip-row { display: flex; gap: 4px; }
+.df-chip-row .df-input { flex: 1; }
+.df-chip {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 5px 2px 7px;
+    background: var(--blue-hover); border: 1px solid #bfdbfe;
+    border-radius: 10px; font-size: 11px; color: var(--blue);
+}
+.df-chip span { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.df-chip button {
+    background: none; border: none; color: var(--blue-light);
+    cursor: pointer; font-size: 13px; line-height: 1; padding: 0; opacity: .7;
+}
+.df-chip button:hover { opacity: 1; color: var(--accent); }
+.df-btn-chip-add {
+    padding: 4px 10px; font-size: 13px; font-weight: 700;
+    background: var(--blue); color: #fff; border: none;
+    border-radius: 4px; cursor: pointer; flex-shrink: 0;
+}
+.df-btn-chip-add:hover { background: var(--blue-light); }
     `;
     document.head.appendChild(style);
 }
