@@ -557,6 +557,7 @@ Flight::route('GET /api/taux', function () {
     $b         = parseBbox();
     $champ     = validateChamp(Flight::request()->query['champ'] ?? '', TAUX_CHAMPS, 'taux_fb_commune_vote');
     $millesime = validateMillesime(Flight::request()->query['millesime'] ?? '2025');
+    [$tol, $prec] = zTol(); $tolStr = sprintf('%.8f', $tol);
     $conds     = ["millesime = :millesime"];
     if ($b) $conds[] = "ST_Intersects(ST_SetSRID(geom,4326), ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326))";
     $where = 'WHERE ' . implode(' AND ', $conds);
@@ -565,7 +566,7 @@ Flight::route('GET /api/taux', function () {
                      taux_tse_net, taux_tafnb_commune_net, taux_teom_plein, taux_tse_gemapi_net,
                      taux_fnb_commune, taux_fnb_syndicats_net, taux_fnb_gfp_vote, taux_tafnb_gfp_net,
                      $champ AS valeur_affichee,
-                     ST_AsGeoJSON(ST_SetSRID(geom,4326),6)::text AS geojson
+                     ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_SetSRID(geom,4326),$tolStr),$prec)::text AS geojson
               FROM taux_clean $where LIMIT 5000";
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $stmt = $db->prepare($sql);
@@ -894,13 +895,14 @@ Flight::route('GET /api/taux/evolution', function () {
         Flight::json($result);
     } else {
         $b = parseBbox();
+        [$tol, $prec] = zTol(); $tolStr = sprintf('%.8f', $tol);
         $conds = ["t1.millesime = :milDe", "t2.millesime = :milA", "t1.$champ IS NOT NULL", "t2.$champ IS NOT NULL"];
         if ($b) $conds[] = "ST_Intersects(ST_SetSRID(t1.geom,4326), ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326))";
         $where = 'WHERE ' . implode(' AND ', $conds);
         $sql = "SELECT t1.ogc_fid, t1.dep, t1.com, t1.libcom, t1.millesime AS millesime_de, t2.millesime AS millesime_a,
                        t1.$champ AS val_de, t2.$champ AS val_a,
                        ROUND((t2.$champ::numeric - t1.$champ::numeric)::numeric, 4) AS delta,
-                       ST_AsGeoJSON(ST_SetSRID(t1.geom,4326),6)::text AS geojson
+                       ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_SetSRID(t1.geom,4326),$tolStr),$prec)::text AS geojson
                 FROM taux_clean t1
                 JOIN taux_clean t2 ON t2.dep = t1.dep AND t2.com = t1.com AND t2.millesime = :milA
                 $where LIMIT 5000";
@@ -1259,6 +1261,7 @@ Flight::route('GET /api/ta/union', function () {
     $milM  = (int)(Flight::request()->query['millesime'] ?? 0);
     if (!$annee) $annee = (int)$db->query("SELECT MAX(annee) FROM ta_forfaitaires")->fetchColumn();
     if (!$milM)  $milM  = 2026;   // millésime zones majorées
+    [$tol, $prec] = zTol(); $tolStr = sprintf('%.8f', $tol);
 
     $DEPS_IDF = ['75','77','78','91','92','93','94','95'];
     $forf = $db->prepare("SELECT zone, type_local, valeur FROM ta_forfaitaires WHERE annee=:a");
@@ -1329,7 +1332,7 @@ Flight::route('GET /api/ta/union', function () {
            ST_AsGeoJSON(ST_SimplifyPreserveTopology(
                CASE WHEN mu.geom_maj IS NOT NULL
                     THEN ST_Difference(cb.geom, mu.geom_maj)
-                    ELSE cb.geom END, 0.0001),4)::text AS geojson
+                    ELSE cb.geom END, $tolStr),$prec)::text AS geojson
     FROM communes_bbox cb
     LEFT JOIN maj_union mu ON mu.code_insee = cb.code_insee
     WHERE cb.taux_total > 0
@@ -1343,7 +1346,7 @@ Flight::route('GET /api/ta/union', function () {
            ROUND(ma.taux + COALESCE(cb.taux_dep,0) + COALESCE(cb.taux_reg,0), 3) AS taux_total,
            CASE WHEN ma.parcelle IS NOT NULL THEN 'parcelle' ELSE 'section' END AS type_zone,
            ma.section, ma.parcelle,
-           ST_AsGeoJSON(ST_SimplifyPreserveTopology(ma.geom,0.0001),4)::text AS geojson
+           ST_AsGeoJSON(ST_SimplifyPreserveTopology(ma.geom,$tolStr),$prec)::text AS geojson
     FROM maj_all ma
     JOIN communes_bbox cb ON cb.code_insee = ma.code_insee
     ";
@@ -1384,6 +1387,7 @@ Flight::route('GET /api/ta', function () {
     $db    = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $annee = (int)(Flight::request()->query['annee'] ?? 0);
     if (!$annee) $annee = (int)$db->query("SELECT MAX(annee) FROM ta_forfaitaires")->fetchColumn();
+    [$tol, $prec] = zTol(); $tolStr = sprintf('%.8f', $tol);
     $DEPS_IDF = ['75','77','78','91','92','93','94','95'];
     // Valeurs forfaitaires pour l'année choisie (logement + autres constructions)
     $forf = $db->prepare("SELECT zone, type_local, valeur FROM ta_forfaitaires WHERE annee=:a");
@@ -1401,7 +1405,7 @@ Flight::route('GET /api/ta', function () {
                    t.exo_terrains_rehab, t.exo_transf_habitation,
                    ST_AsGeoJSON(ST_SimplifyPreserveTopology(
                        CASE WHEN ST_SRID(c.geom)=4326 THEN c.geom ELSE ST_Transform(c.geom,4326) END,
-                   0.0002),4)::text AS geojson
+                   $tolStr),$prec)::text AS geojson
             FROM ta_taux t
             JOIN communes_geom c ON c.insee = t.code_insee
             WHERE ST_Intersects(
@@ -1493,6 +1497,7 @@ Flight::route('GET /api/ta/majore', function () {
 
     $mil = (int)(Flight::request()->query['millesime'] ?? 0);
     $milFilter = $mil > 0 ? "AND millesime = $mil" : "";
+    [$tol, $prec] = zTol(); $tolStr = sprintf('%.8f', $tol);
 
     // Taille de la bbox en degrés : grande bbox → on ne sort que des points (centroides)
     // pour éviter de sérialiser des centaines de milliers de polygones
@@ -1543,7 +1548,7 @@ Flight::route('GET /api/ta/majore', function () {
     $sqlParc = "SELECT DISTINCT ON (code_insee, section, parcelle)
                     dep, commune, code_insee, libcom, prefixe, section, parcelle,
                     taux, date_effet, millesime,
-                    ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.00005), 5)::text AS geojson
+                    ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, $tolStr), $prec)::text AS geojson
                FROM ta_majore_parcelles
                WHERE ST_Intersects(geom, ST_MakeEnvelope(:x1,:y1,:x2,:y2,4326)) $milFilter
                ORDER BY code_insee, section, parcelle, millesime DESC, taux DESC";
@@ -1946,9 +1951,10 @@ Flight::route('GET /api/zfu', function () {
 Flight::route('GET /api/sections', function () {
     $b = parseBbox();
     if (!$b) { Flight::json(['error' => 'bbox requis'], 400); return; }
+    [$tol, $prec] = zTol(); $tolStr = sprintf('%.8f', $tol);
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $sql = "SELECT ogc_fid, code_dep, code_insee, nom_com, section, secteur,
-                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_Transform(geom,4326),0.00005),5) AS geojson
+                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_Transform(geom,4326),$tolStr),$prec) AS geojson
             FROM sections_2025
             WHERE " . bboxWhere('geom') . " LIMIT 3000";
     $stmt = $db->prepare($sql);
@@ -1961,12 +1967,13 @@ Flight::route('GET /api/sections', function () {
 Flight::route('GET /api/sections/communes', function () {
     $b = parseBbox();
     if (!$b) { Flight::json(['error' => 'bbox requis'], 400); return; }
+    [$tol, $prec] = zTol(); $tolStr = sprintf('%.8f', $tol);
     $db = getDb(); if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
     $sql = "SELECT left(code_insee,5) AS code_insee, code_dep, nom_com,
                    COUNT(*) AS nb_sections,
                    MODE() WITHIN GROUP (ORDER BY secteur::int) AS secteur_dom,
                    ST_AsGeoJSON(ST_SimplifyPreserveTopology(
-                       ST_Transform(ST_Union(geom),4326), 0.0002),4) AS geojson
+                       ST_Transform(ST_Union(geom),4326), $tolStr),$prec) AS geojson
             FROM sections_2025
             WHERE " . bboxWhere('geom') . "
             GROUP BY left(code_insee,5), code_dep, nom_com
@@ -2002,11 +2009,12 @@ Flight::route('GET /api/sections/departements', function () {
 Flight::route('GET /api/coeff', function () {
     $b = parseBbox();
     if (!$b) { Flight::json(['error' => 'bbox requis'], 400); return; }
+    [$tol, $prec] = zTol(); $tolStr = sprintf('%.8f', $tol);
     $sql = "SELECT c.ogc_fid, c.idu, c.codecommune, COALESCE(cg.nom, c.codecommune) AS nom_commune,
                    c.section, c.parcelle,
                    c.coeff_2017, c.coeff_2018, c.coeff_2019, c.coeff_2020,
                    c.coeff_2024, c.coeff_2026, c.evolution,
-                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_Transform(c.geom,4326),0.00001),5) AS geojson
+                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_Transform(c.geom,4326),$tolStr),$prec) AS geojson
             FROM coeff_loc_final c
             LEFT JOIN communes_geom cg ON cg.insee = c.codecommune
             WHERE " . bboxWhere('c.geom') . " LIMIT 4000";
@@ -2102,12 +2110,13 @@ Flight::route('GET /api/tarifs', function () {
     if (!$b || !$cat) { Flight::json(['error' => 'bbox et categorie requis'], 400); return; }
     if (!preg_match('/^[A-Z]{3}[0-9]$/', $cat)) { Flight::json(['error' => 'categorie invalide'], 400); return; }
     $annee = validateAnnee(Flight::request()->query['annee'] ?? '');
+    [$tol, $prec] = zTol(); $tolStr = sprintf('%.8f', $tol);
     $col   = "val_$annee";
     $sql = "SELECT s.ogc_fid, s.code_dep, s.code_insee, s.nom_com, s.section, s.secteur,
                    t.categorie, t.$col AS valeur,
                    t.val_2017,t.val_2019,t.val_2020,t.val_2021,
                    t.val_2022,t.val_2023,t.val_2024,t.val_2025,t.val_2026,
-                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_Transform(s.geom,4326),0.0001),4) AS geojson
+                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_Transform(s.geom,4326),$tolStr),$prec) AS geojson
             FROM sections_2025 s
             JOIN tarifs_pivot t
                 ON t.dep = CASE WHEN s.code_dep='97' THEN left(s.code_insee,3) ELSE s.code_dep END
@@ -2127,10 +2136,11 @@ Flight::route('GET /api/tarifs/communes', function () {
     if (!$b || !$cat) { Flight::json(['error' => 'bbox et categorie requis'], 400); return; }
     if (!preg_match('/^[A-Z]{3}[0-9]$/', $cat)) { Flight::json(['error' => 'categorie invalide'], 400); return; }
     $annee = validateAnnee(Flight::request()->query['annee'] ?? '');
+    [$tol, $prec] = zTol(); $tolStr = sprintf('%.8f', $tol);
     $col   = "val_$annee";
     $sql = "SELECT c.insee AS code_insee, left(c.insee,2) AS code_dep,
                    c.nom AS nom_com, t_avg.valeur,
-                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(c.geom,0.0002),4) AS geojson
+                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(c.geom,$tolStr),$prec) AS geojson
             FROM communes_geom c
             JOIN (
                 SELECT left(s.code_insee,5) AS code_insee,

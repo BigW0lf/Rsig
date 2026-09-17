@@ -103,8 +103,8 @@ export function loadSections(map) {
     }
 
     const url = level === 'commune'
-        ? `/api/sections/communes?bbox=${bboxParam(map)}`
-        : `/api/sections?bbox=${bboxParam(map)}`;
+        ? `/api/sections/communes?bbox=${bboxParam(map)}&z=${Math.floor(map.getZoom())}`
+        : `/api/sections?bbox=${bboxParam(map)}&z=${Math.floor(map.getZoom())}`;
     fetchLayer(url, fc => render(fc, level));
 }
 

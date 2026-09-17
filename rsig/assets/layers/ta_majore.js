@@ -160,7 +160,7 @@ function load(map) {
     showSpinner();
 
     const mil = getMil();
-    const url = `/api/ta/majore?bbox=${bboxParam(map)}${mil ? '&millesime='+mil : ''}`;
+    const url = `/api/ta/majore?bbox=${bboxParam(map)}${mil ? '&millesime='+mil : ''}&z=${Math.floor(map.getZoom())}`;
 
     apiFetch(url, { signal: abortCtrl.signal })
         .then(r => r.json())

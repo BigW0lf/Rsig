@@ -114,7 +114,7 @@ export function loadTaux(map) {
             if (cache[key]) { renderEvol(cache[key], 'dept'); return; }
             fetchLayer(`/api/taux/evolution?champ=${champ}&de=${milDe}&a=${milA}&level=dept`, fc => { cache[key] = fc; renderEvol(fc, 'dept'); });
         } else {
-            fetchLayer(`/api/taux/evolution?champ=${champ}&de=${milDe}&a=${milA}&bbox=${bboxParam(map)}`, fc => renderEvol(fc, 'commune'));
+            fetchLayer(`/api/taux/evolution?champ=${champ}&de=${milDe}&a=${milA}&bbox=${bboxParam(map)}&z=${Math.floor(map.getZoom())}`, fc => renderEvol(fc, 'commune'));
         }
         return;
     }
@@ -144,7 +144,7 @@ export function loadTaux(map) {
         if (cache[key]) { render(cache[key], 'dept'); return; }
         fetchLayer(`/api/taux/departements?champ=${champ}&millesime=${millesime}`, fc => { cache[key] = fc; render(fc, 'dept'); });
     } else {
-        fetchLayer(`/api/taux?bbox=${bboxParam(map)}&champ=${champ}&millesime=${millesime}`, fc => render(fc, 'commune'));
+        fetchLayer(`/api/taux?bbox=${bboxParam(map)}&champ=${champ}&millesime=${millesime}&z=${Math.floor(map.getZoom())}`, fc => render(fc, 'commune'));
     }
 }
 

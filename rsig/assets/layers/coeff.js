@@ -232,7 +232,7 @@ export function loadCoeff(map) {
     const pal    = isEvol ? PAL.coeffEv : PAL.coeff;
 
     if (isEvol) {
-        fetchLayer(`/api/coeff?bbox=${bboxParam(map)}`, fc => {
+        fetchLayer(`/api/coeff?bbox=${bboxParam(map)}&z=${Math.floor(map.getZoom())}`, fc => {
             if (!active) return;
             polyCache = fc;
             if (!fc?.features?.length) return;
@@ -250,7 +250,7 @@ export function loadCoeff(map) {
     } else {
         getBreaks(champ, globalB => {
             if (!active) return;
-            fetchLayer(`/api/coeff?bbox=${bboxParam(map)}`, fc => {
+            fetchLayer(`/api/coeff?bbox=${bboxParam(map)}&z=${Math.floor(map.getZoom())}`, fc => {
                 if (!active) return;
                 polyCache = fc;
                 if (!fc?.features?.length) return;

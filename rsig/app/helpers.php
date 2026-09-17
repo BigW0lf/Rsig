@@ -88,6 +88,13 @@ function cacheSet(string $key, mixed $payload, int $ttl = 300): void {
     rename($tmp, $f);
 }
 
+function zTol(): array {
+    $z    = isset($_GET['z']) ? max(0, min(20, (int)$_GET['z'])) : 13;
+    $tol  = max(0.000001, 360.0 / (256.0 * pow(2.0, $z)) * 2.0);
+    $prec = max(4, min(7, (int)ceil(-log10($tol)) + 1));
+    return [$tol, $prec];
+}
+
 const TAUX_CHAMPS = [
     // TFPB
     'taux_fb_commune_vote','taux_fb_syndicats_net','taux_fb_gfp_vote',

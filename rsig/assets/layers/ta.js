@@ -122,9 +122,10 @@ export function loadTa(map) {
             .catch(e => { hideSpinner(); });
     } else {
         const milParam = milUnion ? `&millesime=${milUnion}` : '';
+        const z = Math.floor(map.getZoom());
         const url = mode === 'union'
-            ? `/api/ta/union?bbox=${bboxParam(map)}&annee=${annee}${milParam}`
-            : `/api/ta?bbox=${bboxParam(map)}&annee=${annee}`;
+            ? `/api/ta/union?bbox=${bboxParam(map)}&annee=${annee}${milParam}&z=${z}`
+            : `/api/ta?bbox=${bboxParam(map)}&annee=${annee}&z=${z}`;
         apiFetch(url, { signal: abortCtrl.signal })
             .then(r => r.json())
             .then(fc => {

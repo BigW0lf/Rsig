@@ -104,9 +104,10 @@ export function loadTarifs(map) {
         return;
     }
 
+    const z = Math.floor(map.getZoom());
     const url = level === 'commune'
-        ? `/api/tarifs/communes?bbox=${bboxParam(map)}&categorie=${cat}&annee=${annee}`
-        : `/api/tarifs?bbox=${bboxParam(map)}&categorie=${cat}&annee=${annee}`;
+        ? `/api/tarifs/communes?bbox=${bboxParam(map)}&categorie=${cat}&annee=${annee}&z=${z}`
+        : `/api/tarifs?bbox=${bboxParam(map)}&categorie=${cat}&annee=${annee}&z=${z}`;
     fetchLayer(url, fc => render(fc, level));
 }
 
