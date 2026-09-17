@@ -7,6 +7,7 @@ let active   = false;
 let abortCtrl = null;
 let loadId    = 0;
 const cache = {};
+const breaksCache = {};
 
 const DEPT_ZOOM = 9;
 
@@ -26,6 +27,15 @@ const CHAMP_LABELS = {
     taux_fnb_gfp_vote:     'TFPNB EPCI',
     taux_tafnb_gfp_net:    'TFPNB TASA EPCI',
 };
+
+function getBreaks(champ, millesime, cb) {
+    const key = `${champ}|${millesime}`;
+    if (breaksCache[key]) { cb(breaksCache[key]); return; }
+    fetch(`/api/taux/stats?champ=${encodeURIComponent(champ)}&millesime=${encodeURIComponent(millesime)}`)
+        .then(r => r.json())
+        .then(b => { if (Array.isArray(b) && b.length) { breaksCache[key] = b; cb(b); } else cb(null); })
+        .catch(() => cb(null));
+}
 
 function bboxParam(map) {
     const b = map.getBounds();
@@ -86,8 +96,14 @@ export function loadTaux(map) {
         const renderEvol = (fc, lvl) => {
             if (myId !== loadId || !active) return;
             if (!fc?.features?.length) { if (map.getSource('taux-src')) map.getSource('taux-src').setData(EMPTY_FC); return; }
-            const vals   = fc.features.map(f => +f.properties.delta).filter(v => isFinite(v));
-            const breaks = computeBreaks(vals, 5);
+            const bKey = `evol|${champ}|${milDe}|${milA}`;
+            if (!breaksCache[bKey]) {
+                const vals = fc.features.map(f => +f.properties.delta).filter(v => isFinite(v));
+                const b = computeBreaks(vals, 5);
+                if (b?.length) breaksCache[bKey] = b;
+            }
+            const breaks = breaksCache[bKey];
+            if (!breaks?.length) return;
             upsert(map, fc, stepExpr('delta', breaks, PAL_EVOL));
             const sfx = lvl === 'dept' ? ' pts (moy. dep.)' : ' pts';
             saveLegend('taux', label + (lvl === 'dept' ? ' — moy. par département' : ' — communes'), breaks, PAL_EVOL, sfx);
@@ -112,11 +128,15 @@ export function loadTaux(map) {
             if (map.getSource('taux-src')) map.getSource('taux-src').setData(EMPTY_FC);
             return;
         }
-        const breaks = computeBreaks(fc.features.map(f => +f.properties.valeur_affichee).filter(v => isFinite(v) && v > 0), 5);
-        upsert(map, fc, stepExpr('valeur_affichee', breaks, PAL.taux));
-        const label       = CHAMP_LABELS[champ] ?? champ;
-        const niveauLabel = renderLevel === 'dept' ? 'moy. par département' : 'communes';
-        saveLegend('taux', `${label} ${millesime} — ${niveauLabel}`, breaks, PAL.taux, ' %');
+        getBreaks(champ, millesime, breaks => {
+            if (myId !== loadId || !active) return;
+            if (!breaks?.length) breaks = computeBreaks(fc.features.map(f => +f.properties.valeur_affichee).filter(v => isFinite(v) && v > 0), 5);
+            if (!breaks?.length) return;
+            upsert(map, fc, stepExpr('valeur_affichee', breaks, PAL.taux));
+            const label       = CHAMP_LABELS[champ] ?? champ;
+            const niveauLabel = renderLevel === 'dept' ? 'moy. par département' : 'communes';
+            saveLegend('taux', `${label} ${millesime} — ${niveauLabel}`, breaks, PAL.taux, ' %');
+        });
     };
 
     if (level === 'dept') {
@@ -162,6 +182,7 @@ export function initTaux(map) {
         normalOpts?.classList.toggle('hidden', isEvol);
         evolOpts?.classList.toggle('hidden', !isEvol);
         Object.keys(cache).forEach(k => delete cache[k]);
+        Object.keys(breaksCache).forEach(k => delete breaksCache[k]);
         clearInfo('taux');
         loadTaux(map);
     });
@@ -175,11 +196,12 @@ export function initTaux(map) {
     champEl.addEventListener('change', () => { clearInfo('taux'); loadTaux(map); });
     millesimeEl.addEventListener('change', () => {
         Object.keys(cache).forEach(k => delete cache[k]);
+        Object.keys(breaksCache).forEach(k => { if (!k.startsWith('evol|')) delete breaksCache[k]; });
         clearInfo('taux');
         loadTaux(map);
     });
-    evolDeEl?.addEventListener('change', () => { Object.keys(cache).forEach(k => delete cache[k]); clearInfo('taux'); loadTaux(map); });
-    evolAEl?.addEventListener('change',  () => { Object.keys(cache).forEach(k => delete cache[k]); clearInfo('taux'); loadTaux(map); });
+    evolDeEl?.addEventListener('change', () => { Object.keys(cache).forEach(k => delete cache[k]); Object.keys(breaksCache).forEach(k => { if (k.startsWith('evol|')) delete breaksCache[k]; }); clearInfo('taux'); loadTaux(map); });
+    evolAEl?.addEventListener('change',  () => { Object.keys(cache).forEach(k => delete cache[k]); Object.keys(breaksCache).forEach(k => { if (k.startsWith('evol|')) delete breaksCache[k]; }); clearInfo('taux'); loadTaux(map); });
 
     map.on('click', 'taux-fill', e => {
         if (!active) return;

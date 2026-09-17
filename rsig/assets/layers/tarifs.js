@@ -7,6 +7,7 @@ let active    = false;
 let abortCtrl = null;
 let loadId    = 0;
 const cache = {};
+const breaksCache = {};
 
 const DEPT_ZOOM    = 9;
 const COMMUNE_ZOOM = 13;
@@ -58,6 +59,15 @@ function remove(map) {
     if (map.getSource('tarifs-src')) map.removeSource('tarifs-src');
 }
 
+function getBreaks(cat, annee, cb) {
+    const key = `${cat}|${annee}`;
+    if (breaksCache[key]) { cb(breaksCache[key]); return; }
+    fetch(`/api/tarifs/stats?categorie=${encodeURIComponent(cat)}&annee=${encodeURIComponent(annee)}`)
+        .then(r => r.json())
+        .then(b => { if (Array.isArray(b) && b.length) { breaksCache[key] = b; cb(b); } else cb(null); })
+        .catch(() => cb(null));
+}
+
 export function loadTarifs(map) {
     if (!active) return;
     const cat   = document.getElementById('tarifs-cat').value;
@@ -74,13 +84,17 @@ export function loadTarifs(map) {
             if (map.getSource('tarifs-src')) map.getSource('tarifs-src').setData(EMPTY_FC);
             return;
         }
-        const breaks      = computeBreaks(fc.features.map(f => +f.properties.valeur).filter(v => isFinite(v) && v > 0), 7);
-        const niveauLabel = { dept: 'départements', commune: 'communes', section: 'sections' }[renderLevel];
-        const title       = renderLevel === 'section'
-            ? `${cat} — ${annee} (${niveauLabel})`
-            : `${cat} — ${annee} — moy. par ${niveauLabel.slice(0,-1)}`;
-        upsert(map, fc, stepExpr('valeur', breaks, PAL.tarifs));
-        saveLegend('tarifs', title, breaks, PAL.tarifs, ' €/m²');
+        getBreaks(cat, annee, breaks => {
+            if (myId !== loadId || !active) return;
+            if (!breaks?.length) breaks = computeBreaks(fc.features.map(f => +f.properties.valeur).filter(v => isFinite(v) && v > 0), 7);
+            if (!breaks?.length) return;
+            const niveauLabel = { dept: 'départements', commune: 'communes', section: 'sections' }[renderLevel];
+            const title       = renderLevel === 'section'
+                ? `${cat} — ${annee} (${niveauLabel})`
+                : `${cat} — ${annee} — moy. par ${niveauLabel.slice(0,-1)}`;
+            upsert(map, fc, stepExpr('valeur', breaks, PAL.tarifs));
+            saveLegend('tarifs', title, breaks, PAL.tarifs, ' €/m²');
+        });
     };
 
     if (level === 'dept') {
@@ -117,8 +131,8 @@ export function initTarifs(map, catsReady) {
         if (!active) { if (abortCtrl) abortCtrl.abort(); remove(map); dropLegend('tarifs'); clearInfo('tarifs'); }
         else loadTarifs(map);
     });
-    catEl.addEventListener('change',   () => { clearInfo('tarifs'); loadTarifs(map); });
-    anneeEl.addEventListener('change', () => { clearInfo('tarifs'); loadTarifs(map); });
+    catEl.addEventListener('change',   () => { Object.keys(breaksCache).forEach(k => delete breaksCache[k]); clearInfo('tarifs'); loadTarifs(map); });
+    anneeEl.addEventListener('change', () => { Object.keys(breaksCache).forEach(k => delete breaksCache[k]); clearInfo('tarifs'); loadTarifs(map); });
 
     map.on('click', 'tarifs-fill', e => {
         if (!active) return;

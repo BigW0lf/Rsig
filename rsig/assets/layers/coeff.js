@@ -237,8 +237,13 @@ export function loadCoeff(map) {
             polyCache = fc;
             if (!fc?.features?.length) return;
             fc.features.forEach(f => { f.properties._evol = getVal(f.properties, champ); });
-            const vals   = fc.features.map(f => f.properties._evol).filter(v => v != null && isFinite(v));
-            const breaks = computeBreaks(vals, 6);
+            if (!globalBreaks['_evol']) {
+                const vals = fc.features.map(f => f.properties._evol).filter(v => v != null && isFinite(v));
+                const b = computeBreaks(vals, 6);
+                if (b?.length) globalBreaks['_evol'] = b;
+            }
+            const breaks = globalBreaks['_evol'];
+            if (!breaks?.length) return;
             upsertPoly(map, fc, pal[pal.length - 1], breaks, pal, '_evol');
             saveLegend('coeff', champEl.options[champEl.selectedIndex].text, breaks, pal, ' %');
         });
@@ -293,7 +298,7 @@ export function initCoeff(map) {
         if (!active) { if (abortCtrl) abortCtrl.abort(); removePoly(map); removeClusters(map); dropLegend('coeff'); clearInfo('coeff'); polyCache = null; }
         else loadCoeff(map);
     });
-    champEl.addEventListener('change', () => { polyCache = null; clusterCache = null; clearInfo('coeff'); loadCoeff(map); });
+    champEl.addEventListener('change', () => { polyCache = null; clusterCache = null; Object.keys(globalBreaks).forEach(k => delete globalBreaks[k]); clearInfo('coeff'); loadCoeff(map); });
 
     const seuilEl  = document.getElementById('coeff-seuil');
     const seuilVal = document.getElementById('coeff-seuil-val');

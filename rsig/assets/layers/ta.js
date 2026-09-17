@@ -8,6 +8,16 @@ let active    = false;
 let abortCtrl = null;
 let loadId    = 0;
 let deptCache = { fc: null, annee: null };
+let taStatsCache = null;
+
+function getBreaks(prop, cb) {
+    const key = prop.includes('estime') ? 'estime' : 'taux_total';
+    if (taStatsCache) { cb(taStatsCache[key]); return; }
+    fetch('/api/ta/stats')
+        .then(r => r.json())
+        .then(d => { taStatsCache = d; cb(d[key]); })
+        .catch(() => cb(null));
+}
 
 function getOptions() {
     return {
@@ -23,11 +33,13 @@ function bboxParam(map) {
     return `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
 }
 
-function upsert(map, fc, prop) {
+function upsert(map, fc, prop, breaks) {
     const isEstime = prop.includes('estime');
-    const values = fc.features.map(f => +f.properties[prop]).filter(v => isFinite(v) && v > 0);
-    if (!values.length) return;
-    const breaks = computeBreaks(values, 5);
+    if (!breaks?.length) {
+        const values = fc.features.map(f => +f.properties[prop]).filter(v => isFinite(v) && v > 0);
+        if (!values.length) return;
+        breaks = computeBreaks(values, 5);
+    }
     const color  = stepExpr(prop, breaks, PAL.cfe);
 
     const vis = isHidden('ta') ? 'none' : 'visible';
@@ -94,7 +106,8 @@ export function loadTa(map) {
         // Departements — cache par annee (on est forcément à zoom dept ici, pas commune)
         if (deptCache.fc && deptCache.annee === annee) {
             hideSpinner();
-            upsert(map, deptCache.fc, propForZoom(champ, true));
+            const propD = propForZoom(champ, true);
+            getBreaks(propD, breaks => upsert(map, deptCache.fc, propD, breaks));
             return;
         }
         apiFetch(`/api/ta/departements?annee=${annee}`, { signal: abortCtrl.signal })
@@ -103,7 +116,8 @@ export function loadTa(map) {
                 hideSpinner();
                 if (myId !== loadId) return;
                 deptCache = { fc, annee };
-                upsert(map, fc, propForZoom(champ, true));
+                const propD = propForZoom(champ, true);
+                getBreaks(propD, breaks => upsert(map, fc, propD, breaks));
             })
             .catch(e => { hideSpinner(); });
     } else {
@@ -120,7 +134,8 @@ export function loadTa(map) {
                     if (map.getSource('ta-src')) map.getSource('ta-src').setData(EMPTY_FC);
                     return;
                 }
-                upsert(map, fc, propForZoom(champ, false));
+                const propC = propForZoom(champ, false);
+                getBreaks(propC, breaks => upsert(map, fc, propC, breaks));
             })
             .catch(e => { hideSpinner(); });
     }
