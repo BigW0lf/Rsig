@@ -30,9 +30,13 @@ try {
            ':m' => 'Sync OK — ' . $result['dossiers'] . ' dossiers traités',
            ':id'=> $logId,
        ]);
-    // Invalider le cache GeoJSON CRM après sync réussie
-    foreach (['crm_geojson_main', 'crm_geojson_fallback'] as $k) {
-        @unlink(CACHE_DIR . md5($k) . '.json');
+    // Invalider tous les fichiers cache GeoJSON CRM (clés avec et sans bbox)
+    foreach (glob(CACHE_DIR . '*.json') as $f) {
+        $data = json_decode(file_get_contents($f), true);
+        // Identifier les caches CRM par la présence du champ 'dossier' dans le premier feature
+        if (isset($data['payload']['features'][0]['properties']['dossier'])) {
+            @unlink($f);
+        }
     }
 } catch (\Throwable $e) {
     $db->prepare("UPDATE crm_sync_log SET finished_at=now(), status='error', message=:m WHERE id=:id")

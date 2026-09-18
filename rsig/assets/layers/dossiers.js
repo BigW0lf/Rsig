@@ -5,11 +5,22 @@ import { showInfo, clearInfo, irow, irowHtml } from '../panel.js';
 
 let active = false;
 let loaded = false;
+let loadedBounds = null;
 
 export function loadDossiers(map) {
-    if (!active || loaded) return;
+    if (!active) return;
+
+    const currentBounds = map.getBounds();
+
+    // Ne pas recharger si la vue actuelle est déjà couverte par les bounds chargées
+    if (loaded && loadedBounds &&
+        loadedBounds.contains(currentBounds.getNorthEast()) &&
+        loadedBounds.contains(currentBounds.getSouthWest())) {
+        return;
+    }
+
     showSpinner();
-    const b = map.getBounds();
+    const b = currentBounds;
     const bbox = `${b.getWest().toFixed(4)},${b.getSouth().toFixed(4)},${b.getEast().toFixed(4)},${b.getNorth().toFixed(4)}`;
     apiFetch(`/api/crm/geojson?bbox=${bbox}`)
         .then(r => r.json())
@@ -17,42 +28,48 @@ export function loadDossiers(map) {
             hideSpinner();
             if (!active || !fc?.features?.length) return;
 
-            // Enregistrer le dataset complet dans le filtre si disponible (une seule fois)
-            const filter = window._dossiersFilter;
-            if (filter && !loaded) filter.setFullData(fc);
+            loadedBounds = currentBounds;
 
-            // Appliquer les filtres éventuellement déjà posés avant le chargement
+            const filter = window._dossiersFilter;
+            if (filter) filter.setFullData(fc);
             const displayFc = filter ? filter.applyFilters(fc) : fc;
 
             const tfVals = fc.features.map(f => +f.properties.montant_tf).filter(v => isFinite(v) && v > 0);
             const breaks = tfVals.length ? computeBreaks(tfVals, 5) : null;
             const color  = breaks ? stepExpr('montant_tf', breaks, PAL.tf, '#94a3b8') : '#94a3b8';
 
-            map.addSource('dossiers-src', { type: 'geojson', data: displayFc, cluster: true, clusterRadius: 40 });
-            map.addLayer({ id: 'dossiers-circle', type: 'circle', source: 'dossiers-src',
-                filter: ['!', ['has', 'point_count']],
-                paint: { 'circle-color': color, 'circle-radius': 7, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' } });
-            map.addLayer({ id: 'dossiers-cluster', type: 'circle', source: 'dossiers-src',
-                filter: ['has', 'point_count'],
-                paint: {
-                    'circle-color': '#003189',
-                    'circle-radius': ['step', ['get', 'point_count'], 12, 10, 16, 50, 20],
-                    'circle-stroke-width': 2, 'circle-stroke-color': 'rgba(255,255,255,.8)',
-                } });
-            map.addLayer({ id: 'dossiers-cluster-count', type: 'symbol', source: 'dossiers-src',
-                filter: ['has', 'point_count'],
-                layout: { 'text-field': ['concat', ['to-string', ['get', 'point_count']], ''], 'text-font': ['Noto Sans Regular'], 'text-size': 11 },
-                paint: { 'text-color': '#fff' } });
+            if (!loaded) {
+                map.addSource('dossiers-src', { type: 'geojson', data: displayFc, cluster: true, clusterRadius: 40 });
+                map.addLayer({ id: 'dossiers-circle', type: 'circle', source: 'dossiers-src',
+                    filter: ['!', ['has', 'point_count']],
+                    paint: { 'circle-color': color, 'circle-radius': 7, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' } });
+                map.addLayer({ id: 'dossiers-cluster', type: 'circle', source: 'dossiers-src',
+                    filter: ['has', 'point_count'],
+                    paint: {
+                        'circle-color': '#003189',
+                        'circle-radius': ['step', ['get', 'point_count'], 12, 10, 16, 50, 20],
+                        'circle-stroke-width': 2, 'circle-stroke-color': 'rgba(255,255,255,.8)',
+                    } });
+                map.addLayer({ id: 'dossiers-cluster-count', type: 'symbol', source: 'dossiers-src',
+                    filter: ['has', 'point_count'],
+                    layout: { 'text-field': ['concat', ['to-string', ['get', 'point_count']], ''], 'text-font': ['Noto Sans Regular'], 'text-size': 11 },
+                    paint: { 'text-color': '#fff' } });
+                loaded = true;
+                bddOnTop(map);
+            } else {
+                map.getSource('dossiers-src').setData(displayFc);
+                map.setPaintProperty('dossiers-circle', 'circle-color', color);
+            }
 
-            loaded = true;
-            bddOnTop(map);
             if (breaks) saveLegend('dossiers', 'Taxe foncière (€)', breaks, PAL.tf, ' €');
         })
-        .catch(e => { hideSpinner(); });
+        .catch(() => { hideSpinner(); });
 }
 
 export function initDossiers(map) {
     const toggle = document.getElementById('toggle-dossiers');
+
+    map.on('moveend', () => { if (active) loadDossiers(map); });
 
     map.on('mouseenter', 'dossiers-circle',  () => map.getCanvas().style.cursor = 'pointer');
     map.on('mouseleave', 'dossiers-circle',  () => map.getCanvas().style.cursor = '');
@@ -95,6 +112,7 @@ export function initDossiers(map) {
             });
             if (map.getSource('dossiers-src')) map.removeSource('dossiers-src');
             loaded = false;
+            loadedBounds = null;
             dropLegend('dossiers');
             clearInfo('dossiers');
             window._dossiersFilter?.reset?.();
@@ -103,5 +121,5 @@ export function initDossiers(map) {
         }
     });
 
-    return { isActive: () => active };
+    return { load: () => loadDossiers(map), isActive: () => active };
 }

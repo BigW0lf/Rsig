@@ -324,6 +324,7 @@ function crmSync(PDO $db, bool $forceFull = false): array {
         '_apo_site_dossier_value', '_apo_proprietaires_value', '_apo_auditeur1_value',
         'apo_datededemande', 'apo_dateremiseauclient', 'apo_datedepassageenpreetude',
         'modifiedon', 'apo_produit', 'apo_phasedossier', 'apo_etatdossier',
+        'apo_montanttaxefonciere',
     ]);
 
     $db->beginTransaction();
@@ -377,7 +378,8 @@ function crmSync(PDO $db, bool $forceFull = false): array {
                 ':section'          => _cleanStr($site['apo_section']           ?? null),
                 ':parcelle'         => _cleanStr($site['apo_parcelle']          ?? null),
                 ':lot'              => _cleanStr($site['apo_lot']               ?? null),
-                ':montant_tf'       => isset($site['apo_montanttaxefonciere']) ? (float)$site['apo_montanttaxefonciere'] : null,
+                ':montant_tf'       => isset($dos['apo_montanttaxefonciere']) ? (float)$dos['apo_montanttaxefonciere']
+                                    : (isset($site['apo_montanttaxefonciere']) ? (float)$site['apo_montanttaxefonciere'] : null),
                 ':type_activite'    => _cleanStr($site['apo_typeactivite']      ?? null),
                 ':x3857'            => $x3857,
                 ':y3857'            => $y3857,
@@ -390,6 +392,18 @@ function crmSync(PDO $db, bool $forceFull = false): array {
     } catch (\Throwable $e) {
         $db->rollBack();
         throw $e;
+    }
+
+    // Rattrapage TF : mise à jour montant_tf pour tous les dossiers dont le site a une valeur
+    // couvre les cas où le TF est renseigné sur le site après la création du dossier
+    // (le dossier n'est plus dans le filtre incrémental, mais les sites sont toujours fully fetchés)
+    if (!empty($sitesMap)) {
+        $updTf = $db->prepare("UPDATE crm_dossiers SET montant_tf = :tf WHERE site_id = :sid AND montant_tf IS DISTINCT FROM :tf2");
+        foreach ($sitesMap as $sid => $site) {
+            $tf = isset($site['apo_montanttaxefonciere']) ? (float)$site['apo_montanttaxefonciere'] : null;
+            if ($tf === null) continue;
+            $updTf->execute([':tf' => $tf, ':sid' => $sid, ':tf2' => $tf]);
+        }
     }
 
     return $log;
