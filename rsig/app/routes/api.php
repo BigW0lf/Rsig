@@ -163,9 +163,9 @@ function _launchCrmWorker(?PDO $db, bool $forceFull): void {
         $cmd = '"' . $php . '"' . ($ini ? ' -c "' . $ini . '"' : '') . ' "' . $worker . '" ' . $logId . ' ' . $mode . ' >NUL 2>&1';
         pclose(popen('start "" /B ' . $cmd, 'r'));
     } else {
-        // nohup + setsid pour détacher le process du groupe Apache et éviter qu'il soit tué
         $logFile = sys_get_temp_dir() . '/crm_worker_' . $logId . '.log';
-        $cmd = 'nohup setsid ' . escapeshellarg($php) . ' ' . escapeshellarg($worker) . ' ' . $logId . ' ' . $mode . ' >' . escapeshellarg($logFile) . ' 2>&1 &';
+        // nohup + exec : détache proprement du groupe Apache sans setsid (incompatible Docker)
+        $cmd = 'nohup ' . escapeshellarg($php) . ' ' . escapeshellarg($worker) . ' ' . $logId . ' ' . $mode . ' >' . escapeshellarg($logFile) . ' 2>&1 &';
         shell_exec($cmd);
     }
 
