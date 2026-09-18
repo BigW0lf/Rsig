@@ -10,6 +10,7 @@ const FIELDS = [
     { key: 'auditeur',    label: 'Auditeur',       type: 'select' },
     { key: 'phase',       label: 'Phase',           type: 'select' },
     { key: 'etat',        label: 'État',            type: 'select' },
+    { key: 'produit',     label: 'Produit',          type: 'select' },
     { key: 'client_name', label: 'Client',          type: 'text'   },
     { key: 'montant_tf',  label: 'Taxe foncière',   type: 'number' },
     { key: 'ville',       label: 'Ville',           type: 'text'   },
@@ -18,7 +19,7 @@ const FIELDS = [
 ];
 
 // Valeurs uniques extraites du GeoJSON (peuplées dans setFullData)
-const _selectOptions = { auditeur: [], phase: [], etat: [] };
+const _selectOptions = { produit: [], auditeur: [], phase: [], etat: [] };
 // Valeurs uniques pour autocomplete sur champs texte
 const _textOptions = { client_name: [], ville: [], rtx_code: [] };
 // Champs texte avec autocomplete
@@ -664,7 +665,7 @@ export function initDossiersFilter(map) {
             try { cached = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch (_) {}
 
             let changed = false;
-            ['auditeur', 'phase', 'etat'].forEach(key => {
+            ['produit', 'auditeur', 'phase', 'etat'].forEach(key => {
                 const vals = [...new Set(
                     fc.features.map(f => f.properties[key] ?? '').filter(Boolean)
                 )].sort((a, b) => a.localeCompare(b, 'fr'));
