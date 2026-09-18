@@ -2,7 +2,7 @@
 
 function authStart(): void {
     if (session_status() === PHP_SESSION_NONE) {
-        session_set_cookie_params(['samesite' => 'Strict', 'secure' => true, 'httponly' => true, 'path' => '/']);
+        session_set_cookie_params(['samesite' => 'Lax', 'secure' => true, 'httponly' => true, 'path' => '/']);
         session_start();
     }
 }
