@@ -107,19 +107,6 @@ function bofipParse(string $url): array|false {
     return $result;
 }
 
-// ── Infos session (debug email admin) ───────────────────────────────────────
-Flight::route('GET /api/whoami', function () {
-    requireAuth();
-    authStart();
-    Flight::json([
-        'email'   => $_SESSION['user_email'] ?? null,
-        'name'    => $_SESSION['user_name']  ?? null,
-        'tid'     => $_SESSION['user_tid']   ?? null,
-        'isAdmin' => isAdmin(),
-        'adminEmail' => ADMIN_EMAIL,
-    ]);
-});
-
 // ── Statut BDD (admin) ───────────────────────────────────────────────────────
 Flight::route('GET /api/db/status', function () {
     requireAdmin();
