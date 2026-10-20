@@ -678,13 +678,7 @@ export function initDossiersFilter(map) {
         /** Call this from dossiers.js after loading GeoJSON to register the full dataset */
         setFullData(fc) {
             _fullGeoJSON = fc;
-
-            ['produit', 'auditeur', 'phase', 'etat'].forEach(key => {
-                _selectOptions[key] = [...new Set(
-                    fc.features.map(f => f.properties[key] ?? '').filter(Boolean)
-                )].sort((a, b) => a.localeCompare(b, 'fr'));
-            });
-
+            // _selectOptions alimenté par fetchGlobalOptions() — ne pas écraser ici
             ['client_name', 'ville', 'rtx_code'].forEach(key => {
                 _textOptions[key] = [...new Set(
                     fc.features.map(f => f.properties[key] ?? '').filter(Boolean)
