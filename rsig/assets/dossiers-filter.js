@@ -608,10 +608,25 @@ function injectStyles() {
     document.head.appendChild(style);
 }
 
+// ── Chargement global des options (toute la table, pas de bbox) ──────────────
+function fetchGlobalOptions() {
+    fetch('/api/crm/filter-options')
+        .then(r => r.json())
+        .then(data => {
+            ['auditeur', 'phase', 'etat', 'produit'].forEach(key => {
+                if (Array.isArray(data[key]) && data[key].length) {
+                    _selectOptions[key] = data[key];
+                }
+            });
+        })
+        .catch(() => {});
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────
 export function initDossiersFilter(map) {
     _map = map;
     injectStyles();
+    fetchGlobalOptions();
 
     _container = document.getElementById('dossiers-filter-wrap');
     if (!_container) {

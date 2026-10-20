@@ -107,6 +107,21 @@ function bofipParse(string $url): array|false {
     return $result;
 }
 
+// ── Valeurs uniques pour les filtres dossiers (toute la table, pas de bbox) ──
+Flight::route('GET /api/crm/filter-options', function () {
+    $db = getDb();
+    if (!$db) { Flight::json(['error' => 'DB KO'], 503); return; }
+    $result = [];
+    foreach (['auditeur', 'phase', 'etat', 'produit'] as $field) {
+        $result[$field] = $db->query(
+            "SELECT DISTINCT $field FROM crm_dossiers
+             WHERE $field IS NOT NULL AND $field <> ''
+             ORDER BY $field"
+        )->fetchAll(PDO::FETCH_COLUMN);
+    }
+    Flight::json($result);
+});
+
 // ── Statut BDD (admin) ───────────────────────────────────────────────────────
 Flight::route('GET /api/db/status', function () {
     requireAdmin();
