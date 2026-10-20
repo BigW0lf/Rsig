@@ -456,7 +456,7 @@ function buildForm() {
     form.appendChild(multiWrap);
     form.appendChild(btnRow);
 
-    return form;
+    return { el: form, refresh: updateOpSel };
 }
 
 // ── Injection CSS ──────────────────────────────────────────────────────────
@@ -644,11 +644,14 @@ export function initDossiersFilter(map) {
     // Form (hidden initially)
     _formWrap = document.createElement('div');
     _formWrap.style.display = 'none';
-    _formWrap.appendChild(buildForm());
+    const builtForm = buildForm();
+    _formWrap.appendChild(builtForm.el);
     _container.appendChild(_formWrap);
 
     openBtn.addEventListener('click', () => {
-        _formWrap.style.display = _formWrap.style.display === 'none' ? 'block' : 'none';
+        const wasHidden = _formWrap.style.display === 'none';
+        _formWrap.style.display = wasHidden ? 'block' : 'none';
+        if (wasHidden) builtForm.refresh();
     });
 
     // Initial render
@@ -660,36 +663,18 @@ export function initDossiersFilter(map) {
         /** Call this from dossiers.js after loading GeoJSON to register the full dataset */
         setFullData(fc) {
             _fullGeoJSON = fc;
-            const LS_KEY = 'dossiers_select_options';
-            let cached = {};
-            try { cached = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch (_) {}
 
-            let changed = false;
             ['produit', 'auditeur', 'phase', 'etat'].forEach(key => {
-                const vals = [...new Set(
+                _selectOptions[key] = [...new Set(
                     fc.features.map(f => f.properties[key] ?? '').filter(Boolean)
                 )].sort((a, b) => a.localeCompare(b, 'fr'));
-
-                const cachedVals = cached[key];
-                if (Array.isArray(cachedVals) && cachedVals.length === vals.length) {
-                    _selectOptions[key] = cachedVals;
-                } else {
-                    _selectOptions[key] = vals;
-                    cached[key] = vals;
-                    changed = true;
-                }
             });
 
-            // Valeurs uniques pour autocomplete texte (toujours recalculées, pas besoin de cache)
             ['client_name', 'ville', 'rtx_code'].forEach(key => {
                 _textOptions[key] = [...new Set(
                     fc.features.map(f => f.properties[key] ?? '').filter(Boolean)
                 )].sort((a, b) => a.localeCompare(b, 'fr'));
             });
-
-            if (changed) {
-                try { localStorage.setItem(LS_KEY, JSON.stringify(cached)); } catch (_) {}
-            }
         },
         /** Force re-apply filters to map (call after map source is ready) */
         refresh() {
