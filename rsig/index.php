@@ -30,6 +30,14 @@ Flight::before('start', function () {
     $url    = Flight::request()->url;
     $method = Flight::request()->method;
     if (!str_starts_with($url, '/api/')) return;
+
+    // Routes POST qui nécessitent seulement d'être authentifié (pas admin)
+    $authOnlyPost = ['/api/track/layers', '/api/prospects/statut'];
+    if (in_array($url, $authOnlyPost, true)) {
+        requireAuth();
+        return;
+    }
+
     // Mutations et routes sensibles → admin requis
     if ($method === 'POST' || $method === 'PUT' || $method === 'DELETE'
         || preg_match('#^/api/(sql|query|db-check|upload-csv)$#', $url)
