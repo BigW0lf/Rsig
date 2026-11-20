@@ -8,6 +8,9 @@ const RAA_PERIODES   = ['quotidien' => 'P1D', 'hebdomadaire' => 'P7D', 'bimensue
 
 /** Tables de pilotage (mêmes définitions que publier_bdd.py, côté veille). */
 function raaTablesPilotage(PDO $db): void {
+    // Les horodatages de la veille sont en heure de Paris, sans fuseau (comme veille_tick.py).
+    date_default_timezone_set('Europe/Paris');
+    $db->exec("SET TIME ZONE 'Europe/Paris'");
     if ($db->query("SELECT to_regclass('public.raa_veille_execution')")->fetchColumn()) return;
     $db->exec("CREATE TABLE IF NOT EXISTS raa_veille_config (
         id                INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
