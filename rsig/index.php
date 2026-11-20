@@ -22,6 +22,7 @@ require 'app/auth.php';
 require 'app/dynamics.php';
 require 'app/routes/pages.php';
 require 'app/routes/api.php';
+require 'app/routes/raa.php';
 
 Flight::set('flight.views.path', __DIR__ . '/views');
 

@@ -90,6 +90,31 @@ Flight::route('GET /donnees', function () { requireAuth();
 });
 
 Flight::route('GET /maj-bdd',  function () { requireAuth(); Flight::render('maj_bdd_archive', ['connected' => getDb() !== null]); });
+// ── Autres outils — téléchargements ──────────────────────
+Flight::route('GET /outils', function () { requireAuth(); Flight::render('outils'); });
+Flight::route('GET /dl/@file', function ($file) {
+    requireAuth();
+    // basename() empêche toute traversée de répertoire
+    $safe = basename($file);
+    $path = __DIR__ . '/../../downloads/' . $safe;
+    if (!$safe || !is_file($path)) {
+        Flight::halt(404, 'Fichier introuvable');
+        return;
+    }
+    $ext  = strtolower(pathinfo($safe, PATHINFO_EXTENSION));
+    $mime = match($ext) {
+        'exe', 'msi' => 'application/octet-stream',
+        'zip'        => 'application/zip',
+        'pdf'        => 'application/pdf',
+        default      => 'application/octet-stream',
+    };
+    header('Content-Type: ' . $mime);
+    header('Content-Disposition: attachment; filename="' . $safe . '"');
+    header('Content-Length: ' . filesize($path));
+    header('Cache-Control: no-store');
+    readfile($path);
+    exit;
+});
 Flight::route('GET /requetes', function () { requireAuth(); trackVisit('requetes'); Flight::render('requetes', ['connected' => getDb() !== null]); });
 Flight::route('GET /bofip',    function () { requireAuth(); trackVisit('bofip'); Flight::render('bofip'); });
 // ── Mise à jour — admin uniquement ───────────────────────

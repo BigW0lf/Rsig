@@ -30,12 +30,15 @@
     <a href="#" class="active" data-page="carte">Carte</a>
     <a href="#" data-page="requetes">Requêtes</a>
     <a href="#" data-page="bofip">BOFIP</a>
+    <a href="#" data-page="raa">RAA</a>
     <?php if (isAdmin()): ?>
     <a href="#" data-page="maj">Mise à jour</a>
     <a href="#" data-page="donnees">Données</a>
+    <a href="/outils" target="_blank" rel="noopener">Autres outils</a>
     <a href="/admin/stats" target="_blank" style="margin-left:auto;font-size:0.78rem;opacity:.8" title="Stats d'utilisation">📊 Stats</a>
     <?php else: ?>
     <a href="#" data-page="donnees" style="margin-left:auto">Données</a>
+    <a href="/outils" target="_blank" rel="noopener">Autres outils</a>
     <?php endif; ?>
     <div style="display:flex;align-items:center;gap:4px;margin-left:auto">
         <button onclick="window.copyPermalink?.()" title="Copier le lien de cette vue" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:background .15s" onmouseover="this.style.background='rgba(255,255,255,.28)'" onmouseout="this.style.background='rgba(255,255,255,.15)'">
@@ -228,6 +231,7 @@ kbd {
     <iframe id="iframe-requetes" src="" style="width:100%;height:100%;border:none;display:none"></iframe>
     <iframe id="iframe-crm"      src="" style="width:100%;height:100%;border:none;display:none"></iframe>
     <iframe id="iframe-bofip"    src="" style="width:100%;height:100%;border:none;display:none"></iframe>
+    <iframe id="iframe-raa"      src="" style="width:100%;height:100%;border:none;display:none"></iframe>
     <iframe id="iframe-maj"      src="" style="width:100%;height:100%;border:none;display:none"></iframe>
 </div>
 
@@ -863,7 +867,7 @@ document.addEventListener('keydown', e => {
 });
 
 // ── Navigation SPA ───────────────────────────────────────
-const PAGES   = { donnees: '/donnees', requetes: '/requetes', crm: '/crm', bofip: '/bofip', maj: '/maj' };
+const PAGES   = { donnees: '/donnees', requetes: '/requetes', crm: '/crm', bofip: '/bofip', raa: '/raa', maj: '/maj' };
 const overlay = document.getElementById('page-overlay');
 
 function showPage(page) {
@@ -897,7 +901,7 @@ document.querySelectorAll('nav a[data-page]').forEach(a => {
 });
 window.addEventListener('popstate', e => showPage(e.state?.page || 'carte'));
 window.addEventListener('load', () => {
-    const pathToPage = { '/donnees': 'donnees', '/requetes': 'requetes', '/crm': 'crm', '/bofip': 'bofip', '/maj': 'maj' };
+    const pathToPage = { '/donnees': 'donnees', '/requetes': 'requetes', '/crm': 'crm', '/bofip': 'bofip', '/raa': 'raa', '/maj': 'maj' };
     const initPage = pathToPage[location.pathname] || 'carte';
     if (initPage !== 'carte') showPage(initPage);
     else history.replaceState({ page: 'carte' }, '', location.pathname);

@@ -6,3 +6,5 @@ explore.data.gouv.fr/
 *.tmp
 .claude/
 rsig/config.php
+rsig/downloads/*
+!rsig/downloads/.gitkeep
