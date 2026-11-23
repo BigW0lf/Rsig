@@ -134,13 +134,6 @@ $libConstat = ['trouve' => 'Décision repérée', 'verifier' => 'À vérifier à
         </div>
         <?php if ($isAdmin): ?>
         <div class="veille-commandes">
-            <label>Fréquence
-                <select id="veille-frequence">
-                    <?php foreach ($frequences as $k => $lib): ?>
-                    <option value="<?= $k ?>"><?= $h($lib) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
             <button class="btn-veille" id="veille-lancer" type="button">Lancer maintenant</button>
             <button class="btn-veille" id="veille-bascule" type="button"></button>
         </div>
@@ -264,7 +257,7 @@ $libConstat = ['trouve' => 'Décision repérée', 'verifier' => 'À vérifier à
 // ── État et pilotage de la veille ─────────────────────────
 const VEILLE_INITIALE = <?= json_encode($veille, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
 const FREQUENCES = <?= json_encode($frequences, JSON_UNESCAPED_UNICODE) ?>;
-const STATUTS = { termine: 'cycle terminé', pause: 'en pause (plafond de requêtes atteint)', bloque: 'interrompu par un blocage des sites',
+const STATUTS = { termine: 'cycle terminé', pause: 'en pause (plafond de requêtes atteint)', bloque: 'interrompu par un blocage des sites (nouvel essai toutes les heures)',
                   arrete: 'arrêté', erreur: 'erreur', interrompu: 'interrompu' };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const dateFr = (d, heure = true) => d ? new Date(d.replace(' ', 'T')).toLocaleString('fr-FR',
@@ -282,7 +275,7 @@ function afficherVeille(v) {
                + `${e.requetes} requête(s) · démarré le ${dateFr(e.debut)}`;
     } else if (v.actif) {
         voyant.className = 'voyant v-active';
-        titre = `Veille active — ${esc(FREQUENCES[v.frequence] || v.frequence)}`;
+        titre = 'Veille active — 1 département par minute, 5 PDF par minute au plus ; nouveau cycle une semaine après la fin du précédent';
         detail = (v.prochain ? 'Prochain passage : ' + esc(v.prochain) + '.' : '')
                + (e ? ` Dernier passage le ${dateFr(e.debut)} : ${esc(STATUTS[e.statut] || e.statut)}, ${e.requetes} requête(s), ${e.trouves} décision(s) trouvée(s).` : '');
     } else {
@@ -300,9 +293,7 @@ function afficherVeille(v) {
         + (v.dernier_declenchement ? ` (dernier signe le ${dateFr(v.dernier_declenchement)})` : '')
         + ' : la veille ne partira pas seule. Vérifier la tâche planifiée « Veille RAA » sur le poste ou le serveur.';
 
-    const freq = document.getElementById('veille-frequence');
-    if (freq) {
-        freq.value = v.frequence;
+    if (document.getElementById('veille-bascule')) {
         const b = document.getElementById('veille-bascule');
         b.textContent = v.actif ? 'Arrêter la veille' : 'Activer la veille';
         b.dataset.action = v.actif ? 'arreter' : 'activer';
@@ -343,7 +334,6 @@ function commander(action, extra = {}) {
         afficherVeille(v);
     });
 }
-document.getElementById('veille-frequence')?.addEventListener('change', e => commander('frequence', { frequence: e.target.value }));
 document.getElementById('veille-lancer')?.addEventListener('click', () => commander('lancer'));
 document.getElementById('veille-bascule')?.addEventListener('click', e => {
     if (e.target.dataset.action === 'arreter' && !confirm('Arrêter la veille ? Un passage en cours s\'arrêtera avant sa prochaine requête.')) return;
