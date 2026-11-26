@@ -62,8 +62,8 @@ function raaEtatVeille(PDO $db): array {
         $prochain = $cfg['reprise_apres'] ? 'suite du cycle le ' . $fmt($cfg['reprise_apres'])
                                           : 'suite du cycle au prochain déclenchement';
     } elseif ($cfg['reprise_apres'] || $cfg['cycle_debut']) {
-        // Cycle terminé : la veille attend une semaine (reprise_apres, posé par veille_tick.py).
-        $t = $cfg['reprise_apres'] ? strtotime($cfg['reprise_apres']) : strtotime($cfg['cycle_debut'] . ' +7 days');
+        // Cycle terminé : la veille attend 24 h (reprise_apres, posé par veille_tick.py).
+        $t = $cfg['reprise_apres'] ? strtotime($cfg['reprise_apres']) : strtotime($cfg['cycle_debut'] . ' +1 day');
         $prochain = $t <= time() ? 'nouveau cycle au prochain déclenchement' : 'nouveau cycle le ' . $fmt($t);
     } else {
         $prochain = 'premier cycle au prochain déclenchement';

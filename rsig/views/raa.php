@@ -275,7 +275,7 @@ function afficherVeille(v) {
                + `${e.requetes} requête(s) · démarré le ${dateFr(e.debut)}`;
     } else if (v.actif) {
         voyant.className = 'voyant v-active';
-        titre = 'Veille active — 1 département par minute, 5 PDF par minute au plus ; nouveau cycle une semaine après la fin du précédent';
+        titre = 'Veille active en boucle — 1 département par minute, 3 PDF par minute et 40 par heure au plus, PDF scannés lus par OCR ; nouveau cycle 24 h après la fin du précédent';
         detail = (v.prochain ? 'Prochain passage : ' + esc(v.prochain) + '.' : '')
                + (e ? ` Dernier passage le ${dateFr(e.debut)} : ${esc(STATUTS[e.statut] || e.statut)}, ${e.requetes} requête(s), ${e.trouves} décision(s) trouvée(s).` : '');
     } else {
